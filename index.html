@@ -309,6 +309,15 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);min-h
 .profile-add .profile-avatar{background:transparent;border:2px dashed var(--muted2);color:var(--muted2);font-size:1.7rem;font-weight:400}
 .profile-add .profile-name{color:var(--muted2)}
 
+/* inline new-profile form */
+.new-profile-form{background:var(--surface);border:2px solid var(--border2);border-radius:20px;padding:30px 28px;width:100%;max-width:340px;display:flex;flex-direction:column;gap:14px;animation:rowIn .2s ease}
+.new-profile-form h2{font-size:1.1rem;font-weight:700;margin-bottom:2px}
+.new-profile-form input{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;color:var(--text);padding:11px 13px;font-family:'Heebo',sans-serif;font-size:1rem;direction:rtl}
+.new-profile-form input:focus{outline:none;border-color:var(--accent)}
+.new-profile-form .form-row{display:flex;gap:8px}
+.new-profile-form .btn-ok{flex:1;padding:12px;background:var(--text);border:none;border-radius:9px;color:var(--bg);font-family:'Heebo',sans-serif;font-size:.95rem;font-weight:700;cursor:pointer}
+.new-profile-form .btn-bk{padding:12px 16px;background:transparent;border:1px solid var(--border2);border-radius:9px;color:var(--muted2);font-family:'Heebo',sans-serif;font-size:.95rem;cursor:pointer}
+
 .add-profile-modal{background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:30px;width:100%;max-width:360px;box-shadow:0 24px 60px rgba(0,0,0,0.15);transform:translateY(12px) scale(.98);transition:transform .22s cubic-bezier(0.34,1.56,0.64,1)}
 .overlay.open .add-profile-modal{transform:translateY(0) scale(1)}
 
@@ -326,23 +335,20 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);min-h
 
 <!-- PROFILE PICKER -->
 <div class="profile-screen" id="profileScreen">
-  <h1>מי אתה ?</h1>
-  <p>בחר פרופיל כדי להתחיל</p>
-  <div class="profile-cards" id="profileCards"></div>
-</div>
-
-<!-- ADD PROFILE OVERLAY -->
-<div class="overlay" id="addProfileOv" onclick="closeOv(event,'addProfileOv')">
-  <div class="add-profile-modal">
-    <div class="modal-head">
-      <div class="modal-title">פרופיל חדש</div>
-      <button class="modal-x" onclick="closeModal('addProfileOv')">✕</button>
-    </div>
-    <div class="field"><label>שם</label><input type="text" id="newProfileName" placeholder="שם הפרופיל..." /></div>
-    <div class="field"><label>אמוג'י (אופציונלי)</label><input type="text" id="newProfileEmoji" placeholder="😊" maxlength="2" /></div>
-    <div class="modal-foot">
-      <button class="btn-save" onclick="createProfile()">צור פרופיל</button>
-      <button class="btn-cancel" onclick="closeModal('addProfileOv')">ביטול</button>
+  <div id="profilePickerView">
+    <h1 style="font-size:1.7rem;font-weight:800;color:var(--text);text-align:center">מי אתה ?</h1>
+    <p style="font-size:.95rem;color:var(--muted2);text-align:center">בחר פרופיל כדי להתחיל</p>
+    <div class="profile-cards" id="profileCards"></div>
+  </div>
+  <div id="profileFormView" class="hidden">
+    <div class="new-profile-form">
+      <h2>פרופיל חדש</h2>
+      <input type="text" id="newProfileName" placeholder="שם הפרופיל..." onkeydown="if(event.key==='Enter')createProfile()" />
+      <input type="text" id="newProfileEmoji" placeholder="אמוג'י (אופציונלי) 😊" maxlength="2" onkeydown="if(event.key==='Enter')createProfile()" />
+      <div class="form-row">
+        <button class="btn-ok" onclick="createProfile()">צור פרופיל</button>
+        <button class="btn-bk" onclick="showProfilePicker()">חזור</button>
+      </div>
     </div>
   </div>
 </div>
@@ -607,19 +613,25 @@ function renderProfilePicker() {
 function openAddProfile() {
   document.getElementById('newProfileName').value = '';
   document.getElementById('newProfileEmoji').value = '';
-  document.getElementById('addProfileOv').classList.add('open');
-  setTimeout(() => document.getElementById('newProfileName').focus(), 150);
+  document.getElementById('profilePickerView').classList.add('hidden');
+  document.getElementById('profileFormView').classList.remove('hidden');
+  setTimeout(() => document.getElementById('newProfileName').focus(), 80);
+}
+
+function showProfilePicker() {
+  document.getElementById('profileFormView').classList.add('hidden');
+  document.getElementById('profilePickerView').classList.remove('hidden');
 }
 
 function createProfile() {
   const name = document.getElementById('newProfileName').value.trim();
-  if (!name) return;
+  if (!name) { document.getElementById('newProfileName').focus(); return; }
   const emoji = document.getElementById('newProfileEmoji').value.trim();
   const profiles = getProfiles();
-  const id = name.toLowerCase().replace(/\s+/g,'_') + '_' + Date.now().toString(36);
+  const id = 'p_' + Date.now().toString(36);
   profiles.push({ id, name, emoji });
   saveProfiles(profiles);
-  closeModal('addProfileOv');
+  showProfilePicker();
   renderProfilePicker();
 }
 
