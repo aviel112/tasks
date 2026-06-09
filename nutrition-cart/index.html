@@ -254,6 +254,10 @@ button{font-family:inherit;cursor:pointer}
   <!-- ADMIN PANEL -->
   <div id="adminPanel" class="adm" style="display:none">
     <h2>⚙️ ניהול פריטים <span id="adminMode" style="font-size:.65rem;font-weight:400;color:var(--mut)"></span></h2>
+    <div style="margin-bottom:14px">
+      <div style="font-size:.72rem;font-weight:700;color:var(--carb);margin-bottom:8px">📬 בקשות ממתינות</div>
+      <div id="reqList"></div>
+    </div>
     <div class="adm-form" id="adminForm">
       <input id="aId"    placeholder="ID (אנגלית, ייחודי)" autocomplete="off">
       <select id="aCat">
@@ -284,9 +288,33 @@ button{font-family:inherit;cursor:pointer}
     <div class="bl2">₪<span id="bCost">0</span> <small>/ שבוע</small></div>
   </div>
   <div style="display:flex;gap:8px">
+    <button class="rst req-btn" onclick="openRequestModal()">💡 הצע מוצר</button>
     <button class="rst" onclick="exportList()">📋 ייצוא</button>
     <button class="rst" onclick="printList()">🖨️ הדפס</button>
     <button class="rst" onclick="resetAll()">🗑️ נקה</button>
+  </div>
+</div>
+
+<!-- REQUEST MODAL -->
+<div id="reqModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--surf);border-radius:var(--r);padding:20px;width:100%;max-width:400px;box-shadow:var(--sh)">
+    <h3 style="font-size:.95rem;margin-bottom:14px;color:var(--txt)">💡 הצע מוצר להוספה</h3>
+    <div style="display:grid;gap:8px">
+      <input id="rName" placeholder="שם המוצר *" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      <select id="rCat" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit">
+        <option value="veg">🥦 ירקות ופירות</option>
+        <option value="protein">🥩 חלבונים</option>
+        <option value="carbs">🍚 פחמימות</option>
+        <option value="fat">🫒 שומנים</option>
+      </select>
+      <input id="rUnit" placeholder="יחידת מידה (למשל: 100 גרם)" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      <input id="rPrice" placeholder="מחיר משוער ₪ (לא חובה)" type="number" step="0.1" min="0" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      <textarea id="rNote" placeholder="הערה (לא חובה)" rows="2" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;resize:none;width:100%"></textarea>
+      <div style="display:flex;gap:8px">
+        <button onclick="submitRequest()" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--grn);color:#fff;font-weight:700;font-size:.85rem;cursor:pointer">שלח בקשה</button>
+        <button onclick="closeRequestModal()" style="padding:9px 14px;border-radius:8px;border:1.5px solid var(--brd);background:transparent;color:var(--mut);font-size:.82rem;cursor:pointer">ביטול</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -553,36 +581,107 @@ function g(id){return document.getElementById(id)}
 
 // ── ADMIN ─────────────────────────────────────────────────────
 const STORAGE_KEY='nc_items_v1';
+const REQ_KEY='nc_requests_v1';
+const _k=[52,48,54,57,56].map(c=>String.fromCharCode(c)).join(''); // "40698" suffix
+const _p='0'+_k; // full code
+let admUnlocked=false;
 let editingId=null;
 
 function loadItems(){
   try{
     const saved=localStorage.getItem(STORAGE_KEY);
-    if(saved){
-      const parsed=JSON.parse(saved);
-      if(parsed&&parsed.length){
-        ITEMS.length=0;
-        parsed.forEach(i=>ITEMS.push(i));
-      }
-    }
+    if(saved){const parsed=JSON.parse(saved);if(parsed&&parsed.length){ITEMS.length=0;parsed.forEach(i=>ITEMS.push(i));}}
   }catch(e){}
 }
+function saveItems(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(ITEMS))}catch(e){}}
 
-function saveItems(){
-  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(ITEMS))}catch(e){}
+// ── REQUESTS (משתמשים רגילים) ─────────────────────────────────
+function loadRequests(){try{return JSON.parse(localStorage.getItem(REQ_KEY)||'[]')}catch(e){return[]}}
+function saveRequests(r){try{localStorage.setItem(REQ_KEY,JSON.stringify(r))}catch(e){}}
+
+function updateReqBadge(){
+  const n=loadRequests().length;
+  const b=g('adminBtn');
+  b.textContent=n>0?`⚙️ (${n})`:'⚙️';
 }
 
+function openRequestModal(){
+  g('reqModal').style.display='flex';
+  g('rName').focus();
+}
+function closeRequestModal(){
+  g('reqModal').style.display='none';
+  ['rName','rUnit','rPrice','rNote'].forEach(id=>g(id).value='');
+  g('rCat').value='protein';
+}
+function submitRequest(){
+  const name=(g('rName').value||'').trim();
+  if(!name){alert('נא לרשום שם מוצר');return;}
+  const req={id:'req_'+Date.now(),name,cat:g('rCat').value,unit:(g('rUnit').value||'').trim(),price:(g('rPrice').value||''),note:(g('rNote').value||'').trim(),ts:new Date().toLocaleDateString('he-IL')};
+  const reqs=loadRequests();reqs.push(req);saveRequests(reqs);updateReqBadge();
+  closeRequestModal();
+  alert('✅ הבקשה נשלחה! האדמין יבדוק ויוסיף בקרוב.');
+}
+
+// ── ADMIN PANEL ────────────────────────────────────────────────
 function toggleAdmin(){
+  if(!admUnlocked){
+    const pass=prompt('קוד אדמין:');
+    if(pass===null)return;
+    if(pass!==_p){alert('קוד שגוי');return;}
+    admUnlocked=true;
+  }
   const p=g('adminPanel');
   const open=p.style.display==='none';
   p.style.display=open?'block':'none';
   g('adminBtn').style.borderColor=open?'var(--carb)':'var(--brd)';
-  if(open){adminClear();renderAdminList();}
+  if(open){adminClear();renderAdminList();renderRequests();}
+}
+
+function renderRequests(){
+  const reqs=loadRequests();
+  const el=g('reqList');
+  if(!reqs.length){el.innerHTML='<div style="font-size:.7rem;color:var(--mut);text-align:center;padding:8px">אין בקשות ממתינות</div>';return;}
+  el.innerHTML=reqs.map(r=>`
+    <div class="adm-row" style="flex-wrap:wrap;gap:6px">
+      <div style="flex:1;min-width:0">
+        <div class="an">${r.name}</div>
+        <div class="au">${r.cat} | ${r.unit||'—'} | ₪${r.price||'?'}</div>
+        ${r.note?`<div style="font-size:.65rem;color:var(--mut);margin-top:2px">💬 ${r.note}</div>`:''}
+        <div style="font-size:.6rem;color:var(--mut)">${r.ts}</div>
+      </div>
+      <button class="adm-eb e" onclick="approveRequest('${r.id}')">✅ אשר</button>
+      <button class="adm-eb d" onclick="rejectRequest('${r.id}')">🗑️</button>
+    </div>`).join('');
+}
+
+function approveRequest(id){
+  const reqs=loadRequests();
+  const req=reqs.find(r=>r.id===id);
+  if(!req)return;
+  // fill admin form with request data
+  g('aId').value='item_'+Date.now();
+  g('aCat').value=req.cat;
+  g('aName').value=req.name;
+  g('aUnit').value=req.unit||'';
+  g('aPrice').value=req.price||'';
+  g('aP').value=''; g('aC').value=''; g('aF').value='';
+  g('adminMode').textContent='מאשר בקשה: '+req.name;
+  // remove request
+  saveRequests(reqs.filter(r=>r.id!==id));
+  updateReqBadge();renderRequests();
+  g('adminForm').scrollIntoView({behavior:'smooth'});
+}
+
+function rejectRequest(id){
+  if(!confirm('למחוק בקשה זו?'))return;
+  saveRequests(loadRequests().filter(r=>r.id!==id));
+  updateReqBadge();renderRequests();
 }
 
 function renderAdminList(){
   const el=g('adminList');
-  el.innerHTML='<div style="font-size:.72rem;font-weight:700;color:var(--mut);margin-bottom:8px">פריטים קיימים</div>';
+  el.innerHTML='<div style="font-size:.72rem;font-weight:700;color:var(--mut);margin:12px 0 8px">פריטים קיימים</div>';
   CATS.forEach(cat=>{
     const items=ITEMS.filter(i=>i.cat===cat.id);
     if(!items.length)return;
@@ -600,24 +699,18 @@ function renderAdminList(){
 }
 
 function adminEdit(id){
-  const item=ITEMS.find(i=>i.id===id);
-  if(!item)return;
+  const item=ITEMS.find(i=>i.id===id);if(!item)return;
   editingId=id;
-  g('aId').value=item.id; g('aId').disabled=true;
-  g('aCat').value=item.cat;
-  g('aName').value=item.name;
-  g('aUnit').value=item.unit;
-  g('aPrice').value=item.price;
-  g('aP').value=item.p;
-  g('aC').value=item.c;
-  g('aF').value=item.f;
+  g('aId').value=item.id;g('aId').disabled=true;
+  g('aCat').value=item.cat;g('aName').value=item.name;g('aUnit').value=item.unit;
+  g('aPrice').value=item.price;g('aP').value=item.p;g('aC').value=item.c;g('aF').value=item.f;
   g('aNoMacro').checked=!!item.noMacro;
   g('adminMode').textContent='עריכה: '+item.name;
   g('adminPanel').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function adminDelete(id){
-  if(!confirm('למחוק את הפריט?'))return;
+  if(!confirm('למחוק?'))return;
   const idx=ITEMS.findIndex(i=>i.id===id);
   if(idx>=0){ITEMS.splice(idx,1);saveItems();renderAdminList();render();}
 }
@@ -625,36 +718,32 @@ function adminDelete(id){
 function adminSave(){
   const id=(g('aId').value||'').trim().replace(/\s+/g,'_');
   const name=(g('aName').value||'').trim();
-  const cat=g('aCat').value;
   const unit=(g('aUnit').value||'').trim();
-  const price=parseFloat(g('aPrice').value)||0;
-  const p=parseFloat(g('aP').value)||0;
-  const c=parseFloat(g('aC').value)||0;
-  const f=parseFloat(g('aF').value)||0;
-  const noMacro=g('aNoMacro').checked||undefined;
   if(!id||!name||!unit){alert('מלא שם, ID ויחידה');return;}
-  const item={id,cat,name,unit,price,p,c,f};
-  if(noMacro)item.noMacro=true;
+  const item={id,cat:g('aCat').value,name,unit,
+    price:parseFloat(g('aPrice').value)||0,
+    p:parseFloat(g('aP').value)||0,
+    c:parseFloat(g('aC').value)||0,
+    f:parseFloat(g('aF').value)||0};
+  if(g('aNoMacro').checked)item.noMacro=true;
   const idx=ITEMS.findIndex(i=>i.id===id);
-  if(idx>=0)ITEMS[idx]=item; else ITEMS.push(item);
+  if(idx>=0)ITEMS[idx]=item;else ITEMS.push(item);
   saveItems();adminClear();renderAdminList();render();
 }
 
 function adminClear(){
   editingId=null;
   ['aId','aName','aUnit','aPrice','aP','aC','aF'].forEach(id=>g(id).value='');
-  g('aId').disabled=false;
-  g('aNoMacro').checked=false;
-  g('adminMode').textContent='';
+  g('aId').disabled=false;g('aNoMacro').checked=false;g('adminMode').textContent='';
 }
 
 function adminReset(){
-  if(!confirm('למחוק את כל השינויים ולחזור לברירת מחדל?'))return;
+  if(!confirm('לאפס לברירת מחדל?'))return;
   try{localStorage.removeItem(STORAGE_KEY)}catch(e){}
   location.reload();
 }
 
-document.addEventListener('DOMContentLoaded',()=>{loadItems();render();});
+document.addEventListener('DOMContentLoaded',()=>{loadItems();render();updateReqBadge();});
 </script>
 </body>
 </html>
