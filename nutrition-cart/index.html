@@ -118,6 +118,29 @@ button{font-family:inherit;cursor:pointer}
 .itm.nomacro{border-right-color:var(--mut)!important}
 .nmtag{font-size:.5rem;background:rgba(136,146,176,.15);color:var(--mut);border-radius:4px;padding:1px 5px;font-weight:600;vertical-align:middle;margin-right:4px}
 
+/* ADMIN */
+.adm{background:var(--surf);border:2px solid var(--carb);border-radius:var(--r);padding:16px;margin-bottom:14px}
+.adm h2{color:var(--carb);font-size:.95rem;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.adm-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.adm-form input,.adm-form select{padding:8px 10px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.8rem;font-family:inherit;width:100%}
+.adm-form input:focus,.adm-form select:focus{outline:none;border-color:var(--carb)}
+.adm-form .full{grid-column:1/-1}
+.adm-form label{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--mut);cursor:pointer}
+.adm-save{grid-column:1/-1;padding:9px;border-radius:8px;border:none;background:var(--carb);color:#fff;font-weight:700;font-size:.85rem}
+.adm-save:hover{opacity:.85}
+.adm-list{display:flex;flex-direction:column;gap:6px}
+.adm-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surf2);border-radius:8px;font-size:.78rem}
+.adm-row .an{flex:1;font-weight:600}
+.adm-row .au{color:var(--mut);font-size:.68rem}
+.adm-row .ap{color:var(--grn);font-weight:700;min-width:36px}
+.adm-eb{padding:4px 10px;border-radius:6px;border:1.5px solid var(--brd);background:transparent;font-size:.7rem;font-weight:600}
+.adm-eb.e{color:var(--carb);border-color:var(--carb)}
+.adm-eb.d{color:var(--fat);border-color:var(--fat)}
+.adm-eb:hover{opacity:.75}
+.adm-reset{margin-top:12px;padding:8px 14px;border-radius:8px;border:1.5px solid var(--fat);background:transparent;color:var(--fat);font-size:.72rem;font-weight:600}
+.adm-sep{grid-column:1/-1;height:1px;background:var(--brd);margin:4px 0}
+.adm-hint{font-size:.65rem;color:var(--mut);text-align:center;margin-top:8px}
+
 /* STICKY BAR */
 .sbar{position:sticky;top:57px;z-index:90;background:var(--surf);border-bottom:1px solid var(--brd);padding:8px 16px;box-shadow:0 3px 10px rgba(0,0,0,.2);transition:opacity .2s}
 .sbar-in{max-width:660px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -156,7 +179,10 @@ button{font-family:inherit;cursor:pointer}
       <h1>🛒 עגלת קניות שבועית</h1>
       <p>הוסף מוצרים → ראה עלות + ערכים לשבוע וליום</p>
     </div>
-    <button class="tbtn" onclick="toggleTheme()">🌙</button>
+    <div style="display:flex;gap:8px">
+      <button class="tbtn" onclick="toggleAdmin()" id="adminBtn" title="ניהול פריטים">⚙️</button>
+      <button class="tbtn" onclick="toggleTheme()">🌙</button>
+    </div>
   </div>
 </header>
 
@@ -224,6 +250,32 @@ button{font-family:inherit;cursor:pointer}
     </div>
   </div>
   <div id="cats"></div>
+
+  <!-- ADMIN PANEL -->
+  <div id="adminPanel" class="adm" style="display:none">
+    <h2>⚙️ ניהול פריטים <span id="adminMode" style="font-size:.65rem;font-weight:400;color:var(--mut)"></span></h2>
+    <div class="adm-form" id="adminForm">
+      <input id="aId"    placeholder="ID (אנגלית, ייחודי)" autocomplete="off">
+      <select id="aCat">
+        <option value="veg">🥦 ירקות ופירות</option>
+        <option value="protein">🥩 חלבונים</option>
+        <option value="carbs">🍚 פחמימות</option>
+        <option value="fat">🫒 שומנים</option>
+      </select>
+      <input id="aName"  placeholder="שם המוצר" class="full">
+      <input id="aUnit"  placeholder="יחידה (למשל: 100 גרם | ק&quot;ג=₪12)" class="full">
+      <input id="aPrice" placeholder="מחיר ₪" type="number" step="0.01" min="0">
+      <input id="aP"     placeholder="חלבון (גרם)" type="number" step="0.1" min="0">
+      <input id="aC"     placeholder="פחמימות (גרם)" type="number" step="0.1" min="0">
+      <input id="aF"     placeholder="שומן (גרם)" type="number" step="0.1" min="0">
+      <div class="adm-sep"></div>
+      <label class="full"><input type="checkbox" id="aNoMacro"> לא נכלל בחישוב מאקרו (כמו שמן זית)</label>
+      <button class="adm-save full" onclick="adminSave()">💾 שמור פריט</button>
+    </div>
+    <div class="adm-list" id="adminList"></div>
+    <button class="adm-reset" onclick="adminReset()">🔄 אפס לברירת מחדל</button>
+    <div class="adm-hint">כתובת אדמין: /nutrition-cart/?admin</div>
+  </div>
 </div>
 
 <div class="btm">
@@ -498,7 +550,111 @@ try{
 }catch(e){}
 
 function g(id){return document.getElementById(id)}
-document.addEventListener('DOMContentLoaded',render);
+
+// ── ADMIN ─────────────────────────────────────────────────────
+const STORAGE_KEY='nc_items_v1';
+let editingId=null;
+
+function loadItems(){
+  try{
+    const saved=localStorage.getItem(STORAGE_KEY);
+    if(saved){
+      const parsed=JSON.parse(saved);
+      if(parsed&&parsed.length){
+        ITEMS.length=0;
+        parsed.forEach(i=>ITEMS.push(i));
+      }
+    }
+  }catch(e){}
+}
+
+function saveItems(){
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(ITEMS))}catch(e){}
+}
+
+function toggleAdmin(){
+  const p=g('adminPanel');
+  const open=p.style.display==='none';
+  p.style.display=open?'block':'none';
+  g('adminBtn').style.borderColor=open?'var(--carb)':'var(--brd)';
+  if(open){adminClear();renderAdminList();}
+}
+
+function renderAdminList(){
+  const el=g('adminList');
+  el.innerHTML='<div style="font-size:.72rem;font-weight:700;color:var(--mut);margin-bottom:8px">פריטים קיימים</div>';
+  CATS.forEach(cat=>{
+    const items=ITEMS.filter(i=>i.cat===cat.id);
+    if(!items.length)return;
+    el.innerHTML+=`<div style="font-size:.65rem;font-weight:700;color:var(--mut);margin:8px 0 4px">${cat.icon} ${cat.name}</div>`;
+    items.forEach(item=>{
+      el.innerHTML+=`<div class="adm-row">
+        <span class="an">${item.name}</span>
+        <span class="au">${item.unit}</span>
+        <span class="ap">₪${item.price}</span>
+        <button class="adm-eb e" onclick="adminEdit('${item.id}')">✏️</button>
+        <button class="adm-eb d" onclick="adminDelete('${item.id}')">🗑️</button>
+      </div>`;
+    });
+  });
+}
+
+function adminEdit(id){
+  const item=ITEMS.find(i=>i.id===id);
+  if(!item)return;
+  editingId=id;
+  g('aId').value=item.id; g('aId').disabled=true;
+  g('aCat').value=item.cat;
+  g('aName').value=item.name;
+  g('aUnit').value=item.unit;
+  g('aPrice').value=item.price;
+  g('aP').value=item.p;
+  g('aC').value=item.c;
+  g('aF').value=item.f;
+  g('aNoMacro').checked=!!item.noMacro;
+  g('adminMode').textContent='עריכה: '+item.name;
+  g('adminPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function adminDelete(id){
+  if(!confirm('למחוק את הפריט?'))return;
+  const idx=ITEMS.findIndex(i=>i.id===id);
+  if(idx>=0){ITEMS.splice(idx,1);saveItems();renderAdminList();render();}
+}
+
+function adminSave(){
+  const id=(g('aId').value||'').trim().replace(/\s+/g,'_');
+  const name=(g('aName').value||'').trim();
+  const cat=g('aCat').value;
+  const unit=(g('aUnit').value||'').trim();
+  const price=parseFloat(g('aPrice').value)||0;
+  const p=parseFloat(g('aP').value)||0;
+  const c=parseFloat(g('aC').value)||0;
+  const f=parseFloat(g('aF').value)||0;
+  const noMacro=g('aNoMacro').checked||undefined;
+  if(!id||!name||!unit){alert('מלא שם, ID ויחידה');return;}
+  const item={id,cat,name,unit,price,p,c,f};
+  if(noMacro)item.noMacro=true;
+  const idx=ITEMS.findIndex(i=>i.id===id);
+  if(idx>=0)ITEMS[idx]=item; else ITEMS.push(item);
+  saveItems();adminClear();renderAdminList();render();
+}
+
+function adminClear(){
+  editingId=null;
+  ['aId','aName','aUnit','aPrice','aP','aC','aF'].forEach(id=>g(id).value='');
+  g('aId').disabled=false;
+  g('aNoMacro').checked=false;
+  g('adminMode').textContent='';
+}
+
+function adminReset(){
+  if(!confirm('למחוק את כל השינויים ולחזור לברירת מחדל?'))return;
+  try{localStorage.removeItem(STORAGE_KEY)}catch(e){}
+  location.reload();
+}
+
+document.addEventListener('DOMContentLoaded',()=>{loadItems();render();});
 </script>
 </body>
 </html>
