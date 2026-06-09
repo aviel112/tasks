@@ -140,6 +140,18 @@ button{font-family:inherit;cursor:pointer}
 .adm-reset{margin-top:12px;padding:8px 14px;border-radius:8px;border:1.5px solid var(--fat);background:transparent;color:var(--fat);font-size:.72rem;font-weight:600}
 .adm-sep{grid-column:1/-1;height:1px;background:var(--brd);margin:4px 0}
 .adm-hint{font-size:.65rem;color:var(--mut);text-align:center;margin-top:8px}
+.cat-pick{padding:8px 4px;border-radius:10px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.7rem;cursor:pointer;transition:all .15s;text-align:center;line-height:1.4}
+.cat-pick:hover{border-color:var(--carb)}
+.cat-pick.active{border-color:var(--carb);background:rgba(249,160,60,.12);color:var(--carb);font-weight:700}
+.adm-inp{padding:9px 11px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%;margin-top:6px;transition:border-color .15s}
+.adm-inp:focus{outline:none;border-color:var(--carb)}
+.mac-inp-wrap{display:flex;flex-direction:column}
+.mac-lbl{font-size:.6rem;font-weight:700;color:var(--mut);margin-bottom:0}
+.prot-c{color:var(--prot)!important} .carb-c{color:var(--carb)!important} .fat-c{color:var(--fat)!important}
+.prot-b:focus{border-color:var(--prot)!important}
+.carb-b:focus{border-color:var(--carb)!important}
+.fat-b:focus{border-color:var(--fat)!important}
+.mac-inp{margin-top:4px!important}
 
 /* STICKY BAR */
 .sbar{position:sticky;top:57px;z-index:90;background:var(--surf);border-bottom:1px solid var(--brd);padding:8px 16px;box-shadow:0 3px 10px rgba(0,0,0,.2);transition:opacity .2s}
@@ -254,31 +266,63 @@ button{font-family:inherit;cursor:pointer}
   <!-- ADMIN PANEL -->
   <div id="adminPanel" class="adm" style="display:none">
     <h2>⚙️ ניהול פריטים <span id="adminMode" style="font-size:.65rem;font-weight:400;color:var(--mut)"></span></h2>
-    <div style="margin-bottom:14px">
+
+    <!-- בקשות ממתינות -->
+    <div style="margin-bottom:16px">
       <div style="font-size:.72rem;font-weight:700;color:var(--carb);margin-bottom:8px">📬 בקשות ממתינות</div>
       <div id="reqList"></div>
     </div>
-    <div class="adm-form" id="adminForm">
-      <input id="aId"    placeholder="ID (אנגלית, ייחודי)" autocomplete="off">
-      <select id="aCat">
-        <option value="veg">🥦 ירקות ופירות</option>
-        <option value="protein">🥩 חלבונים</option>
-        <option value="carbs">🍚 פחמימות</option>
-        <option value="fat">🫒 שומנים</option>
-      </select>
-      <input id="aName"  placeholder="שם המוצר" class="full">
-      <input id="aUnit"  placeholder="יחידה (למשל: 100 גרם | ק&quot;ג=₪12)" class="full">
-      <input id="aPrice" placeholder="מחיר ₪" type="number" step="0.01" min="0">
-      <input id="aP"     placeholder="חלבון (גרם)" type="number" step="0.1" min="0">
-      <input id="aC"     placeholder="פחמימות (גרם)" type="number" step="0.1" min="0">
-      <input id="aF"     placeholder="שומן (גרם)" type="number" step="0.1" min="0">
-      <div class="adm-sep"></div>
-      <label class="full"><input type="checkbox" id="aNoMacro"> לא נכלל בחישוב מאקרו (כמו שמן זית)</label>
-      <button class="adm-save full" onclick="adminSave()">💾 שמור פריט</button>
+
+    <!-- טופס הוספה / עריכה -->
+    <div id="adminForm">
+
+      <!-- קטגוריה — כפתורים ויזואליים -->
+      <div style="font-size:.68rem;color:var(--mut);font-weight:600;margin-bottom:6px">קטגוריה</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px" id="catBtns">
+        <button type="button" class="cat-pick active" data-cat="veg"     onclick="pickCat('veg')">🥦<br><span>ירקות</span></button>
+        <button type="button" class="cat-pick"        data-cat="protein" onclick="pickCat('protein')">🥩<br><span>חלבונים</span></button>
+        <button type="button" class="cat-pick"        data-cat="carbs"   onclick="pickCat('carbs')">🍚<br><span>פחמימות</span></button>
+        <button type="button" class="cat-pick"        data-cat="fat"     onclick="pickCat('fat')">🫒<br><span>שומנים</span></button>
+      </div>
+      <input type="hidden" id="aCat" value="veg">
+
+      <!-- שם + יחידה -->
+      <input id="aName"  placeholder="שם המוצר *" class="adm-inp full" autocomplete="off">
+      <input id="aUnit"  placeholder="יחידה  •  למשל: 100 גרם | ק&quot;ג=₪12" class="adm-inp full">
+
+      <!-- מחיר + מאקרו -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-top:8px">
+        <div class="mac-inp-wrap">
+          <label class="mac-lbl">₪ מחיר</label>
+          <input id="aPrice" class="adm-inp mac-inp" type="number" step="0.01" min="0" placeholder="0">
+        </div>
+        <div class="mac-inp-wrap">
+          <label class="mac-lbl prot-c">חלבון g</label>
+          <input id="aP" class="adm-inp mac-inp prot-b" type="number" step="0.1" min="0" placeholder="0">
+        </div>
+        <div class="mac-inp-wrap">
+          <label class="mac-lbl carb-c">פחמ' g</label>
+          <input id="aC" class="adm-inp mac-inp carb-b" type="number" step="0.1" min="0" placeholder="0">
+        </div>
+        <div class="mac-inp-wrap">
+          <label class="mac-lbl fat-c">שומן g</label>
+          <input id="aF" class="adm-inp mac-inp fat-b" type="number" step="0.1" min="0" placeholder="0">
+        </div>
+      </div>
+
+      <!-- לא נכלל במאקרו -->
+      <label style="display:flex;align-items:center;gap:8px;font-size:.75rem;color:var(--mut);margin-top:10px;cursor:pointer">
+        <input type="checkbox" id="aNoMacro"> לא נכלל בחישוב מאקרו (כמו שמן זית)
+      </label>
+
+      <button class="adm-save" style="width:100%;margin-top:12px" onclick="adminSave()">💾 שמור פריט</button>
     </div>
+
     <div class="adm-list" id="adminList"></div>
-    <button class="adm-reset" onclick="adminReset()">🔄 אפס לברירת מחדל</button>
-    <div class="adm-hint">כתובת אדמין: /nutrition-cart/?admin</div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="adm-reset" onclick="adminReset()">🔄 אפס לברירת מחדל</button>
+      <button class="adm-reset" style="border-color:var(--mut);color:var(--mut)" onclick="toggleAdmin()">✕ סגור</button>
+    </div>
   </div>
 </div>
 
@@ -624,6 +668,13 @@ function submitRequest(){
 }
 
 // ── ADMIN PANEL ────────────────────────────────────────────────
+let _selCat='veg';
+function pickCat(cat){
+  _selCat=cat;
+  g('aCat').value=cat;
+  document.querySelectorAll('.cat-pick').forEach(b=>b.classList.toggle('active',b.dataset.cat===cat));
+}
+
 function toggleAdmin(){
   if(!admUnlocked){
     const pass=prompt('קוד אדמין:');
@@ -635,7 +686,8 @@ function toggleAdmin(){
   const open=p.style.display==='none';
   p.style.display=open?'block':'none';
   g('adminBtn').style.borderColor=open?'var(--carb)':'var(--brd)';
-  if(open){adminClear();renderAdminList();renderRequests();}
+  if(open){adminClear();renderAdminList();renderRequests();
+    setTimeout(()=>p.scrollIntoView({behavior:'smooth',block:'start'}),50);}
 }
 
 function renderRequests(){
@@ -660,8 +712,7 @@ function approveRequest(id){
   const req=reqs.find(r=>r.id===id);
   if(!req)return;
   // fill admin form with request data
-  g('aId').value='item_'+Date.now();
-  g('aCat').value=req.cat;
+  pickCat(req.cat);
   g('aName').value=req.name;
   g('aUnit').value=req.unit||'';
   g('aPrice').value=req.price||'';
@@ -701,11 +752,11 @@ function renderAdminList(){
 function adminEdit(id){
   const item=ITEMS.find(i=>i.id===id);if(!item)return;
   editingId=id;
-  g('aId').value=item.id;g('aId').disabled=true;
-  g('aCat').value=item.cat;g('aName').value=item.name;g('aUnit').value=item.unit;
+  pickCat(item.cat);
+  g('aName').value=item.name;g('aUnit').value=item.unit;
   g('aPrice').value=item.price;g('aP').value=item.p;g('aC').value=item.c;g('aF').value=item.f;
   g('aNoMacro').checked=!!item.noMacro;
-  g('adminMode').textContent='עריכה: '+item.name;
+  g('adminMode').textContent='✏️ עריכה: '+item.name;
   g('adminPanel').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
@@ -716,10 +767,10 @@ function adminDelete(id){
 }
 
 function adminSave(){
-  const id=(g('aId').value||'').trim().replace(/\s+/g,'_');
   const name=(g('aName').value||'').trim();
   const unit=(g('aUnit').value||'').trim();
-  if(!id||!name||!unit){alert('מלא שם, ID ויחידה');return;}
+  if(!name||!unit){alert('מלא שם ויחידה');return;}
+  const id=editingId||(name.replace(/[^a-zA-Z֐-׿0-9]/g,'_').toLowerCase()+'_'+Date.now());
   const item={id,cat:g('aCat').value,name,unit,
     price:parseFloat(g('aPrice').value)||0,
     p:parseFloat(g('aP').value)||0,
@@ -733,8 +784,9 @@ function adminSave(){
 
 function adminClear(){
   editingId=null;
-  ['aId','aName','aUnit','aPrice','aP','aC','aF'].forEach(id=>g(id).value='');
-  g('aId').disabled=false;g('aNoMacro').checked=false;g('adminMode').textContent='';
+  ['aName','aUnit','aPrice','aP','aC','aF'].forEach(id=>g(id).value='');
+  g('aNoMacro').checked=false;g('adminMode').textContent='';
+  pickCat('veg');
 }
 
 function adminReset(){
