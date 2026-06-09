@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>עגלת קניות שבועית | אביאל</title>
+<style>
+:root {
+  --bg:    #0f1117;
+  --surf:  #1a1d27;
+  --surf2: #22263a;
+  --brd:   #2e3350;
+  --txt:   #eef0ff;
+  --mut:   #8892b0;
+  --grn:   #00d68f;
+  --grn2:  #00ffb0;
+  --prot:  #3ecf8e;
+  --carb:  #f9a03c;
+  --fat:   #e45858;
+  --r:     12px;
+  --sh:    0 2px 16px rgba(0,0,0,.3);
+}
+.light {
+  --bg:   #f2f4fb;
+  --surf: #ffffff;
+  --surf2:#edf0f9;
+  --brd:  #dde2f0;
+  --txt:  #1a2040;
+  --mut:  #6b7599;
+  --grn:  #00a86b;
+  --sh:   0 2px 16px rgba(0,0,0,.08);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,'Segoe UI',Arial,sans-serif;padding-bottom:80px;transition:background .2s,color .2s}
+button{font-family:inherit;cursor:pointer}
+
+/* HEADER */
+.hdr{background:var(--surf);border-bottom:1px solid var(--brd);padding:14px 16px;position:sticky;top:0;z-index:99;box-shadow:var(--sh)}
+.hdr-in{max-width:660px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+.hdr h1{font-size:1.1rem;font-weight:800;color:var(--grn)}
+.hdr p{font-size:.7rem;color:var(--mut);margin-top:2px}
+.tbtn{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:1rem;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.tbtn:hover{border-color:var(--grn)}
+
+/* WRAP */
+.wrap{max-width:660px;margin:0 auto;padding:14px 12px}
+
+/* SUMMARY */
+.sum{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:var(--sh)}
+.cost-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.cbox{background:var(--surf2);border-radius:var(--r);padding:14px;text-align:center}
+.clbl{font-size:.65rem;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.cnum{font-size:2rem;font-weight:900;color:var(--grn);line-height:1}
+.cnum.sm{font-size:1.45rem}
+.csub{font-size:.63rem;color:var(--mut);margin-top:3px}
+
+.macs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.mc{border-radius:var(--r);padding:10px 8px;text-align:center}
+.mc.p{background:rgba(62,207,142,.1);border:1px solid rgba(62,207,142,.2)}
+.mc.c{background:rgba(249,160,60,.1);border:1px solid rgba(249,160,60,.2)}
+.mc.f{background:rgba(228,88,88,.1);border:1px solid rgba(228,88,88,.2)}
+.mlbl{font-size:.6rem;font-weight:700;letter-spacing:.4px;margin-bottom:3px}
+.mc.p .mlbl{color:var(--prot)} .mc.c .mlbl{color:var(--carb)} .mc.f .mlbl{color:var(--fat)}
+.mwk{font-size:1.15rem;font-weight:900}
+.mc.p .mwk{color:var(--prot)} .mc.c .mwk{color:var(--carb)} .mc.f .mwk{color:var(--fat)}
+.mday{font-size:.7rem;color:var(--mut);margin-top:2px}
+
+.bar-w{margin-bottom:10px}
+.bar-l{display:flex;justify-content:space-between;font-size:.63rem;color:var(--mut);margin-bottom:4px}
+.bar{height:7px;border-radius:4px;background:var(--brd);display:flex;overflow:hidden}
+.bp{background:var(--prot);transition:width .35s}
+.bc{background:var(--carb);transition:width .35s}
+.bf{background:var(--fat);transition:width .35s}
+
+.kcal-r{display:flex;justify-content:space-between;align-items:center;background:var(--surf2);border-radius:8px;padding:8px 12px;font-size:.8rem}
+.kcal-r span{color:var(--mut)}
+.kcv{display:flex;gap:14px}
+.kci{text-align:left}
+.kci strong{display:block;font-size:.9rem}
+.kci small{font-size:.6rem;color:var(--mut)}
+
+/* CATEGORIES */
+.cat{margin-bottom:12px;border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
+.chd{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surf);border:1px solid var(--brd);cursor:pointer;user-select:none}
+.chd:hover{background:var(--surf2)}
+.cico{font-size:1.1rem}
+.cnm{font-weight:700;font-size:.88rem;flex:1}
+.cnt{font-size:.63rem;padding:3px 9px;border-radius:50px;background:var(--surf2);color:var(--mut);border:1px solid var(--brd);font-weight:700}
+.cnt.on{background:rgba(0,214,143,.12);color:var(--grn);border-color:rgba(0,214,143,.3)}
+.carr{font-size:.7rem;color:var(--mut);transition:transform .25s}
+.carr.open{transform:rotate(180deg)}
+.cbdy{border:1px solid var(--brd);border-top:none;border-radius:0 0 var(--r) var(--r);overflow:hidden}
+.cbdy.hide{display:none}
+
+/* ITEM */
+.itm{display:flex;align-items:center;gap:8px;padding:11px 14px;background:var(--surf);border-bottom:1px solid var(--brd);transition:background .15s}
+.itm:last-child{border-bottom:none}
+.itm.on{border-right:3px solid var(--grn);background:color-mix(in srgb, var(--surf) 95%, var(--grn) 5%)}
+.iinf{flex:1;min-width:0}
+.inm{font-weight:600;font-size:.85rem}
+.idsc{font-size:.67rem;color:var(--mut);margin-top:2px}
+.ipills{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.pill{font-size:.58rem;font-weight:700;padding:2px 6px;border-radius:50px}
+.pp{background:rgba(62,207,142,.13);color:var(--prot)}
+.pc{background:rgba(249,160,60,.13);color:var(--carb)}
+.pf{background:rgba(228,88,88,.13);color:var(--fat)}
+.ictrl{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.qb{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:1rem;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.qb:hover{border-color:var(--grn);color:var(--grn)}
+.qadd{background:var(--grn);border-color:var(--grn);color:#fff}
+.qadd:hover{background:var(--grn2);border-color:var(--grn2);color:#000}
+.qn{font-size:.88rem;font-weight:800;min-width:18px;text-align:center;color:var(--grn);cursor:pointer;border-bottom:1px dashed var(--grn);padding:0 2px}
+.qn:hover{opacity:.75}
+.iprc{text-align:left;flex-shrink:0;min-width:44px}
+.iprc .ptot{font-weight:800;font-size:.85rem;color:var(--grn)}
+.iprc .punit{font-size:.6rem;color:var(--mut)}
+.itm:not(.on) .iprc .ptot{color:var(--mut)}
+.itm.nomacro{border-right-color:var(--mut)!important}
+.nmtag{font-size:.5rem;background:rgba(136,146,176,.15);color:var(--mut);border-radius:4px;padding:1px 5px;font-weight:600;vertical-align:middle;margin-right:4px}
+
+/* STICKY BAR */
+.sbar{position:sticky;top:57px;z-index:90;background:var(--surf);border-bottom:1px solid var(--brd);padding:8px 16px;box-shadow:0 3px 10px rgba(0,0,0,.2);transition:opacity .2s}
+.sbar-in{max-width:660px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sbar-cost{display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0}
+.sbar-cost .sc1{font-size:.6rem;color:var(--mut);font-weight:600}
+.sbar-cost .sc2{font-size:1.05rem;font-weight:900;color:var(--grn);line-height:1}
+.sbar-cost .sc3{font-size:.6rem;color:var(--mut);margin-top:1px}
+.sbar-macs{display:flex;gap:10px;align-items:center}
+.sm{display:flex;flex-direction:column;align-items:center}
+.sm .sv{font-size:.82rem;font-weight:800}
+.sm .sl{font-size:.55rem;font-weight:600;margin-top:1px}
+.sm.sp .sv{color:var(--prot)} .sm.sp .sl{color:var(--prot)}
+.sm.sc .sv{color:var(--carb)} .sm.sc .sl{color:var(--carb)}
+.sm.sf .sv{color:var(--fat)}  .sm.sf .sl{color:var(--fat)}
+.sm.sk .sv{color:var(--mut)}  .sm.sk .sl{color:var(--mut)}
+.sdiv{width:1px;height:24px;background:var(--brd);flex-shrink:0}
+.sbar.empty .sbar-macs{opacity:.35}
+.sbar.empty .sbar-cost .sc2{color:var(--mut)}
+
+/* BOTTOM */
+.btm{position:fixed;bottom:0;left:0;right:0;background:var(--surf);border-top:1px solid var(--brd);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;z-index:99;box-shadow:0 -3px 12px rgba(0,0,0,.2)}
+.bl1{font-size:.72rem;color:var(--mut)}
+.bl2{font-size:1.05rem;font-weight:900;color:var(--grn)}
+.bl2 small{font-size:.68rem;color:var(--mut);font-weight:400}
+.rst{padding:7px 13px;border-radius:8px;border:1.5px solid var(--brd);background:transparent;color:var(--mut);font-size:.72rem;font-weight:600;transition:all .2s}
+.rst:hover{border-color:var(--fat);color:var(--fat)}
+
+@media(max-width:420px){.ipills{display:none}.cnum{font-size:1.6rem}.cnum.sm{font-size:1.2rem}}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-in">
+    <div>
+      <h1>🛒 עגלת קניות שבועית</h1>
+      <p>הוסף מוצרים → ראה עלות + ערכים לשבוע וליום</p>
+    </div>
+    <button class="tbtn" onclick="toggleTheme()">🌙</button>
+  </div>
+</header>
+
+<!-- STICKY BAR -->
+<div class="sbar empty" id="sbar">
+  <div class="sbar-in">
+    <div class="sbar-cost">
+      <div class="sc1">עלות ליום</div>
+      <div class="sc2" id="sb-cost">₪0</div>
+      <div class="sc3" id="sb-wcost">₪0 / שבוע</div>
+    </div>
+    <div class="sdiv"></div>
+    <div class="sbar-macs">
+      <div class="sm sp"><span class="sv" id="sb-p">0g</span><span class="sl">חלבון</span></div>
+      <div class="sm sc"><span class="sv" id="sb-c">0g</span><span class="sl">פחמ'</span></div>
+      <div class="sm sf"><span class="sv" id="sb-f">0g</span><span class="sl">שומן</span></div>
+      <div class="sdiv"></div>
+      <div class="sm sk"><span class="sv" id="sb-k">0</span><span class="sl">קל'</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="sum">
+    <div class="cost-row">
+      <div class="cbox">
+        <div class="clbl">עלות לשבוע</div>
+        <div class="cnum" id="wCost">₪0</div>
+        <div class="csub" id="nItems">0 פריטים</div>
+      </div>
+      <div class="cbox">
+        <div class="clbl">עלות ליום</div>
+        <div class="cnum sm" id="dCost">₪0</div>
+        <div class="csub">ממוצע יומי</div>
+      </div>
+    </div>
+    <div class="macs">
+      <div class="mc p">
+        <div class="mlbl">חלבון ליום</div>
+        <div class="mwk" id="dP">0g</div>
+      </div>
+      <div class="mc c">
+        <div class="mlbl">פחמימות ליום</div>
+        <div class="mwk" id="dC">0g</div>
+      </div>
+      <div class="mc f">
+        <div class="mlbl">שומן ליום</div>
+        <div class="mwk" id="dF">0g</div>
+      </div>
+    </div>
+    <div class="bar-w">
+      <div class="bar-l"><span>פילוח מאקרו</span><span id="barPct"></span></div>
+      <div class="bar">
+        <div class="bp" id="bP" style="width:33%"></div>
+        <div class="bc" id="bC" style="width:34%"></div>
+        <div class="bf" id="bF" style="width:33%"></div>
+      </div>
+    </div>
+    <div class="kcal-r">
+      <span>🔥 קלוריות</span>
+      <div class="kcv">
+        <div class="kci"><strong id="wKcal">0</strong><small>לשבוע</small></div>
+        <div class="kci"><strong id="dKcal">0</strong><small>ליום</small></div>
+      </div>
+    </div>
+  </div>
+  <div id="cats"></div>
+</div>
+
+<div class="btm">
+  <div>
+    <div class="bl1" id="bItems">0 פריטים בסל</div>
+    <div class="bl2">₪<span id="bCost">0</span> <small>/ שבוע</small></div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="rst" onclick="exportList()">📋 ייצוא</button>
+    <button class="rst" onclick="printList()">🖨️ הדפס</button>
+    <button class="rst" onclick="resetAll()">🗑️ נקה</button>
+  </div>
+</div>
+
+<!-- PRINT OVERLAY -->
+<div id="printView" style="display:none"></div>
+
+<script>
+const CATS=[
+  {id:'veg',    icon:'🥦',name:'ירקות ופירות'},
+  {id:'protein',icon:'🥩',name:'חלבונים'},
+  {id:'carbs',  icon:'🍚',name:'פחמימות'},
+  {id:'fat',    icon:'🫒',name:'שומנים וממרחים'},
+];
+
+// כל פריט = מנה יומית. qty = כמה מנות אוכלים ביום. שבועי = יומי × 7
+// noMacro = לא נכלל בחישוב מאקרו (רק עלות)
+const ITEMS=[
+  // ── ירקות ופירות — מנה יומית ────────────────────────────────
+  {id:'tomato', cat:'veg',    name:'עגבנייה',         unit:'1 יחידה ~150 גרם',  price:0.9, p:1.4, c:5.9, f:0.3},
+  {id:'cucumb', cat:'veg',    name:'מלפפון',          unit:'1 יחידה ~200 גרם',  price:1.2, p:1.4, c:7.2, f:0.2},
+  {id:'pepper', cat:'veg',    name:'גמבה',            unit:'½ יחידה ~150 גרם',  price:1.5, p:1.5, c:9.0, f:0.5},
+  {id:'leaf',   cat:'veg',    name:'לקט עלים',        unit:'50 גרם',            price:2.5, p:1.3, c:1.8, f:0.3},
+  {id:'sweet',  cat:'veg',    name:'בטטה',            unit:'1 יחידה ~200 גרם',  price:1.2, p:3.2, c:40,  f:0.2},
+  {id:'spin',   cat:'veg',    name:'תרד ביבי',        unit:'50 גרם',            price:3.0, p:1.5, c:1.8, f:0.3},
+  {id:'banana', cat:'veg',    name:'בננה',            unit:'1 בננה ~120 גרם',   price:0.72,p:1.3, c:27.6,f:0.4},
+  {id:'lemon',  cat:'veg',    name:'לימון',           unit:'½ לימון ~60 גרם',   price:0.54,p:0.7, c:5.6, f:0.2},
+  {id:'vegmix', cat:'veg',    name:'מיקס ירקות קפוא', unit:'150 גרם',           price:1.8, p:4.5, c:12,  f:0.8},
+  {id:'straw',  cat:'veg',    name:'תותים',           unit:'150 גרם',           price:4.5, p:0.6, c:5.9, f:0.3},
+
+  // ── חלבונים — מנה יומית ─────────────────────────────────────
+  {id:'milk',   cat:'protein',name:'חלב 1%',          unit:'500 מ"ל',           price:3,   p:17,  c:24,  f:5  },
+  {id:'eggs',   cat:'protein',name:'ביצה',            unit:'1 ביצה',            price:1.2, p:7.5, c:0.6, f:5  },
+  {id:'cott',   cat:'protein',name:"קוטג'",           unit:'250 גרם',           price:6,   p:28,  c:9,   f:11 },
+  {id:'tuna',   cat:'protein',name:'טונה במים',       unit:'1 קופסה',           price:6.25,p:31,  c:0,   f:1.3},
+  {id:'ychse',  cat:'protein',name:'גבינה צהובה 9%',  unit:'30 גרם',            price:3,   p:9,   c:0.3, f:5.4},
+  {id:'powder', cat:'protein',name:'אבקת חלבון',      unit:'מנה (30g חלבון)',   price:4,   p:30,  c:3,   f:1  },
+  {id:'chick',  cat:'protein',name:'חזה עוף',         unit:'100 גרם',           price:4,   p:21,  c:0,   f:4  },
+  {id:'amnon',  cat:'protein',name:'דג אמנון',        unit:'200 גרם',           price:3,   p:20,  c:0,   f:4  },
+  {id:'shaite', cat:'protein',name:'שייטל',           unit:'100 גרם',           price:10,  p:26,  c:0,   f:10 },
+  {id:'sirloin',cat:'protein',name:'סינטה',           unit:'100 גרם',           price:14,  p:26,  c:0,   f:8  },
+  {id:'pastrm', cat:'protein',name:'פסטרמה',          unit:'50 גרם',            price:4.5, p:10,  c:1,   f:1.5},
+  {id:'dessert',cat:'protein',name:'מעדן חלבון',      unit:'יחידה',             price:7,   p:17,  c:8,   f:2  },
+
+  // ── פחמימות — מנה יומית ─────────────────────────────────────
+  {id:'rice',   cat:'carbs',  name:'אורז',            unit:'100 גרם (≈300g מבושל) | ק"ג=₪12', price:1.2, p:7,  c:80, f:0.7},
+  {id:'pasta',  cat:'carbs',  name:'פסטה סקיני',      unit:'200 גרם (שקית שלמה) | ₪9',        price:9,   p:26, c:136,f:2  },
+  {id:'oats',   cat:'carbs',  name:'שיבולת שועל',     unit:'100 גרם (360 קל\') | ק"ג=₪10',    price:1,   p:17, c:66, f:7  },
+  {id:'bread',  cat:'carbs',  name:'לחם',             unit:'100 גרם | כיכר 750g=₪16',         price:2.1, p:8,  c:48, f:2  },
+  {id:'tort',   cat:'carbs',  name:'טורטייה',         unit:'1 יחידה | 8 יח\'=₪18',            price:2.25,p:3,  c:21, f:2.5},
+  {id:'corn',   cat:'carbs',  name:'קורנפלקס',        unit:'50 גרם | 500g=₪18',               price:1.8, p:3.5,c:42, f:0.5},
+  {id:'peric',  cat:'carbs',  name:'פריכיות',         unit:'30 גרם | 100g=₪10',               price:3,   p:2,  c:24, f:0.3},
+
+  // ── שומנים — מנה יומית ──────────────────────────────────────
+  {id:'olive',  cat:'fat',    name:'שמן זית',         unit:'כף 15 מ"ל',         price:0.3, p:0,   c:0,   f:13.5, noMacro:true},
+  {id:'avoc',   cat:'fat',    name:'אבוקדו',          unit:'½ יחידה ~100 גרם',  price:2.5, p:2,   c:8.5, f:15 },
+  {id:'tahini', cat:'fat',    name:'טחינה גולמית',    unit:'50 גרם',            price:1.2, p:8.5, c:10.5,f:26.5},
+  {id:'peanut', cat:'fat',    name:'חמאת בוטנים',     unit:'50 גרם',            price:1.3, p:12.5,c:10,  f:25 },
+  {id:'mayo',   cat:'fat',    name:'מיונז לייט',      unit:'50 גרם',            price:3,   p:0.5, c:7.5, f:9.5},
+];
+
+const qty={}, col={};
+ITEMS.forEach(i=>qty[i.id]=0);
+
+function render(){
+  const el=document.getElementById('cats');
+  el.innerHTML='';
+  CATS.forEach(cat=>{
+    const items=ITEMS.filter(i=>i.cat===cat.id);
+    const n=items.filter(i=>qty[i.id]>0).length;
+    const open=!col[cat.id];
+    const d=document.createElement('div');
+    d.className='cat';
+    d.innerHTML=`
+      <div class="chd" onclick="toggleCat('${cat.id}')">
+        <span class="cico">${cat.icon}</span>
+        <span class="cnm">${cat.name}</span>
+        <span class="cnt ${n?'on':''}">${n}/${items.length}</span>
+        <span class="carr ${open?'open':''}">▼</span>
+      </div>
+      <div class="cbdy ${open?'':'hide'}">${items.map(row).join('')}</div>`;
+    el.appendChild(d);
+  });
+  calc();
+}
+
+function row(item){
+  const q=qty[item.id], on=q>0;
+  const dayPrice=(item.price*q).toFixed(1);
+  const nmTag=item.noMacro?'<span class="nmtag">לא נכלל במאקרו</span>':'';
+  const ctrl=on
+    ?`<button class="qb" onclick="chq('${item.id}',-1)">−</button>
+      <span class="qn" onclick="editQty('${item.id}')" title="לחץ לעריכה">${q}</span>
+      <button class="qb" onclick="chq('${item.id}',1)">+</button>`
+    :`<button class="qb qadd" onclick="chq('${item.id}',1)">+</button>`;
+  return `
+    <div class="itm ${on?'on':''} ${item.noMacro?'nomacro':''}">
+      <div class="iinf">
+        <div class="inm">${item.name} ${nmTag}</div>
+        <div class="idsc">${item.unit}</div>
+      </div>
+      <div class="ictrl">${ctrl}</div>
+      <div class="iprc">
+        <div class="ptot">₪${on?dayPrice:item.price}</div>
+        <div class="punit">${on?'ליום':'ליח\''}</div>
+      </div>
+    </div>`;
+}
+
+function calc(){
+  let dc=0, dp=0, dcc=0, df=0, n=0;
+  ITEMS.forEach(i=>{
+    if(!qty[i.id])return;
+    n++;
+    dc += i.price * qty[i.id];
+    if(!i.noMacro){ dp+=i.p*qty[i.id]; dcc+=i.c*qty[i.id]; df+=i.f*qty[i.id]; }
+  });
+  const wc=dc*7, wp=dp*7, wcc=dcc*7, wf=df*7;
+  const dk=Math.round(dp*4+dcc*4+df*9), wk=dk*7;
+  const tot=dp+dcc+df;
+  g('wCost').textContent='₪'+wc.toFixed(0);
+  g('dCost').textContent='₪'+dc.toFixed(1);
+  g('nItems').textContent=n+' פריטים';
+  g('dP').textContent=Math.round(dp)+'g';
+  g('dC').textContent=Math.round(dcc)+'g';
+  g('dF').textContent=Math.round(df)+'g';
+  g('dKcal').textContent=dk.toLocaleString(); g('wKcal').textContent=wk.toLocaleString();
+  g('bItems').textContent=n+' פריטים בסל';
+  g('bCost').textContent=wc.toFixed(0);
+  g('sb-cost').textContent='₪'+dc.toFixed(1);
+  g('sb-wcost').textContent='₪'+wc.toFixed(0)+' / שבוע';
+  g('sb-p').textContent=Math.round(dp)+'g';
+  g('sb-c').textContent=Math.round(dcc)+'g';
+  g('sb-f').textContent=Math.round(df)+'g';
+  g('sb-k').textContent=dk.toLocaleString();
+  g('sbar').classList.toggle('empty',n===0);
+  if(tot>0){
+    const pp=Math.round(dp/tot*100),cp=Math.round(dcc/tot*100),fp=100-pp-cp;
+    g('bP').style.width=pp+'%'; g('bC').style.width=cp+'%'; g('bF').style.width=fp+'%';
+    g('barPct').textContent=`חלבון ${pp}% | פחמ' ${cp}% | שומן ${fp}%`;
+  } else {
+    g('bP').style.width='33%'; g('bC').style.width='34%'; g('bF').style.width='33%';
+    g('barPct').textContent='';
+  }
+}
+
+function chq(id,d){qty[id]=Math.max(0,(qty[id]||0)+d);render()}
+function editQty(id){
+  const v=prompt('כמות:',qty[id]);
+  if(v===null)return;
+  const n=parseInt(v,10);
+  if(!isNaN(n)&&n>=0){qty[id]=n;render()}
+}
+function toggleCat(id){col[id]=!col[id];render()}
+function resetAll(){ITEMS.forEach(i=>qty[i.id]=0);render()}
+
+function buildListText(){
+  let txt='🛒 רשימת קניות שבועית\n';
+  txt+='═══════════════════════\n';
+  let dayTotal=0;
+  CATS.forEach(cat=>{
+    const items=ITEMS.filter(i=>i.cat===cat.id&&qty[i.id]>0);
+    if(!items.length)return;
+    txt+=`\n${cat.icon} ${cat.name}\n`;
+    items.forEach(i=>{
+      const dCost=(i.price*qty[i.id]).toFixed(1);
+      const wCost=(i.price*qty[i.id]*7).toFixed(1);
+      dayTotal+=i.price*qty[i.id];
+      txt+=`  • ${i.name}  ×${qty[i.id]}  (${i.unit})  — ₪${dCost}/יום  ₪${wCost}/שבוע\n`;
+    });
+  });
+  txt+='\n═══════════════════════\n';
+  txt+=`עלות ליום: ₪${dayTotal.toFixed(1)}\n`;
+  txt+=`עלות לשבוע: ₪${(dayTotal*7).toFixed(1)}\n`;
+  return txt;
+}
+
+function exportList(){
+  const txt=buildListText();
+  const n=ITEMS.filter(i=>qty[i.id]>0).length;
+  if(!n){alert('הסל ריק — הוסף פריטים תחילה');return}
+  const blob=new Blob(['﻿'+txt],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='רשימת-קניות.txt';
+  a.click();
+}
+
+function printList(){
+  const n=ITEMS.filter(i=>qty[i.id]>0).length;
+  if(!n){alert('הסל ריק — הוסף פריטים תחילה');return}
+  let wc=0,wp=0,wcc=0,wf=0;
+  ITEMS.forEach(i=>{if(qty[i.id]){wc+=i.price*qty[i.id];wp+=i.p*qty[i.id];wcc+=i.c*qty[i.id];wf+=i.f*qty[i.id]}});
+  let rows='';
+  CATS.forEach(cat=>{
+    const items=ITEMS.filter(i=>i.cat===cat.id&&qty[i.id]>0);
+    if(!items.length)return;
+    rows+=`<div class="pcat">${cat.icon} ${cat.name}</div>`;
+    items.forEach(i=>{
+      rows+=`<div class="prow">
+        <span class="pname">${i.name}</span>
+        <span class="punit">${i.unit}</span>
+        <span class="pqty">×${qty[i.id]}</span>
+        <span class="pprc">₪${(i.price*qty[i.id]).toFixed(1)}</span>
+        <span class="pchk">☐</span>
+      </div>`;
+    });
+  });
+  const w=window.open('','_blank','width=600,height=800');
+  w.document.write(`<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8">
+  <title>רשימת קניות</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:24px 32px;color:#111;max-width:520px;margin:0 auto}
+    h1{font-size:1.2rem;margin-bottom:4px;color:#007a50}
+    .sub{font-size:.75rem;color:#888;margin-bottom:18px}
+    .pcat{font-weight:800;font-size:.9rem;margin:14px 0 6px;border-bottom:2px solid #eee;padding-bottom:4px;color:#333}
+    .prow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:.88rem}
+    .pname{flex:1;font-weight:600}
+    .punit{color:#888;font-size:.75rem;min-width:80px}
+    .pqty{min-width:28px;font-weight:700;color:#007a50}
+    .pprc{min-width:50px;text-align:left;font-weight:700}
+    .pchk{font-size:1rem;color:#ccc;min-width:20px;text-align:center}
+    .total{margin-top:20px;padding:12px 16px;background:#f6fdf9;border-radius:8px;border:1px solid #c8eed9}
+    .total h2{font-size:.95rem;color:#007a50;margin-bottom:8px}
+    .trow{display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px}
+    .trow strong{font-size:1rem}
+    .macs{display:flex;gap:16px;margin-top:8px;font-size:.78rem;color:#555}
+    @media print{button{display:none}}
+  </style></head><body>
+  <h1>🛒 רשימת קניות שבועית</h1>
+  <div class="sub">הודפס ${new Date().toLocaleDateString('he-IL')}</div>
+  ${rows}
+  <div class="total">
+    <h2>סיכום</h2>
+    <div class="trow"><span>עלות שבועית</span><strong>₪${wc.toFixed(1)}</strong></div>
+    <div class="trow"><span>עלות יומית</span><span>₪${(wc/7).toFixed(1)}</span></div>
+    <div class="macs">
+      <span>חלבון: ${Math.round(wp/7)}g/יום</span>
+      <span>פחמימות: ${Math.round(wcc/7)}g/יום</span>
+      <span>שומן: ${Math.round(wf/7)}g/יום</span>
+      <span>קל': ${Math.round((wp*4+wcc*4+wf*9)/7)}/יום</span>
+    </div>
+  </div>
+  <br><button onclick="window.print()" style="padding:8px 20px;background:#007a50;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.9rem">🖨️ הדפסה</button>
+  </body></html>`);
+  w.document.close();
+}
+
+let dark=true;
+function toggleTheme(){
+  dark=!dark;
+  document.body.classList.toggle('light',!dark);
+  document.querySelector('.tbtn').textContent=dark?'🌙':'☀️';
+  try{localStorage.setItem('theme',dark?'dark':'light')}catch(e){}
+}
+try{
+  if(localStorage.getItem('theme')==='light'){
+    dark=false;
+    document.body.classList.add('light');
+    document.querySelector('.tbtn').textContent='☀️';
+  }
+}catch(e){}
+
+function g(id){return document.getElementById(id)}
+document.addEventListener('DOMContentLoaded',render);
+</script>
+</body>
+</html>
