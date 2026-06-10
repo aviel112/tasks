@@ -352,7 +352,12 @@ button{font-family:inherit;cursor:pointer}
         <option value="fat">🫒 שומנים</option>
       </select>
       <input id="rUnit" placeholder="יחידת מידה (למשל: 100 גרם)" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
-      <input id="rPrice" placeholder="מחיר משוער ₪ (לא חובה)" type="number" step="0.1" min="0" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      <input id="rPrice" placeholder="מחיר ₪ *" type="number" step="0.1" min="0" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <input id="rP" placeholder="חלבון g *" type="number" step="0.1" min="0" style="padding:9px 10px;border-radius:8px;border:1.5px solid rgba(62,207,142,.4);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+        <input id="rC" placeholder="פחמ' g *"  type="number" step="0.1" min="0" style="padding:9px 10px;border-radius:8px;border:1.5px solid rgba(249,160,60,.4);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+        <input id="rF" placeholder="שומן g *"  type="number" step="0.1" min="0" style="padding:9px 10px;border-radius:8px;border:1.5px solid rgba(228,88,88,.4);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      </div>
       <textarea id="rNote" placeholder="הערה (לא חובה)" rows="2" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;resize:none;width:100%"></textarea>
       <div style="display:flex;gap:8px">
         <button onclick="submitRequest()" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--grn);color:#fff;font-weight:700;font-size:.85rem;cursor:pointer">שלח בקשה</button>
@@ -655,13 +660,19 @@ function openRequestModal(){
 }
 function closeRequestModal(){
   g('reqModal').style.display='none';
-  ['rName','rUnit','rPrice','rNote'].forEach(id=>g(id).value='');
+  ['rName','rUnit','rPrice','rP','rC','rF','rNote'].forEach(id=>g(id).value='');
   g('rCat').value='protein';
 }
 function submitRequest(){
   const name=(g('rName').value||'').trim();
   if(!name){alert('נא לרשום שם מוצר');return;}
-  const req={id:'req_'+Date.now(),name,cat:g('rCat').value,unit:(g('rUnit').value||'').trim(),price:(g('rPrice').value||''),note:(g('rNote').value||'').trim(),ts:new Date().toLocaleDateString('he-IL')};
+  if(!g('rPrice').value){alert('נא לרשום מחיר');return;}
+  if(!g('rP').value){alert('נא לרשום כמות חלבון');return;}
+  if(!g('rC').value){alert('נא לרשום כמות פחמימות');return;}
+  if(!g('rF').value){alert('נא לרשום כמות שומן');return;}
+  const req={id:'req_'+Date.now(),name,cat:g('rCat').value,unit:(g('rUnit').value||'').trim(),
+    price:g('rPrice').value,p:g('rP').value,c:g('rC').value,f:g('rF').value,
+    note:(g('rNote').value||'').trim(),ts:new Date().toLocaleDateString('he-IL')};
   const reqs=loadRequests();reqs.push(req);saveRequests(reqs);updateReqBadge();
   closeRequestModal();
   alert('✅ הבקשה נשלחה! האדמין יבדוק ויוסיף בקרוב.');
@@ -716,7 +727,7 @@ function approveRequest(id){
   g('aName').value=req.name;
   g('aUnit').value=req.unit||'';
   g('aPrice').value=req.price||'';
-  g('aP').value=''; g('aC').value=''; g('aF').value='';
+  g('aP').value=req.p||''; g('aC').value=req.c||''; g('aF').value=req.f||'';
   g('adminMode').textContent='מאשר בקשה: '+req.name;
   // remove request
   saveRequests(reqs.filter(r=>r.id!==id));
