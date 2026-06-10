@@ -713,6 +713,7 @@ function renderRequests(){
         ${r.note?`<div style="font-size:.65rem;color:var(--mut);margin-top:2px">💬 ${r.note}</div>`:''}
         <div style="font-size:.6rem;color:var(--mut)">${r.ts}</div>
       </div>
+      <button class="adm-eb" style="color:var(--txt);border-color:var(--brd)" onclick="editRequest('${r.id}')">✏️ ערוך</button>
       <button class="adm-eb e" onclick="approveRequest('${r.id}')">✅ אשר</button>
       <button class="adm-eb d" onclick="rejectRequest('${r.id}')">🗑️</button>
     </div>`).join('');
@@ -807,6 +808,54 @@ function adminReset(){
 }
 
 document.addEventListener('DOMContentLoaded',()=>{loadItems();render();updateReqBadge();});
+
+function editRequest(id){
+  const reqs=loadRequests();
+  const req=reqs.find(r=>r.id===id);
+  if(!req)return;
+  const cats=[{id:'veg',label:'🥦 ירקות'},{id:'protein',label:'🥩 חלבונים'},{id:'carbs',label:'🍚 פחמימות'},{id:'fat',label:'🫒 שומנים'}];
+  const catOpts=cats.map(c=>`<option value="${c.id}"${req.cat===c.id?' selected':''}>${c.label}</option>`).join('');
+  const modal=document.createElement('div');
+  modal.id='editReqModal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML=`
+    <div style="background:var(--surf);border-radius:16px;padding:20px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;direction:rtl">
+      <div style="font-weight:700;font-size:1rem;text-align:center">✏️ עריכת בקשה</div>
+      <input id="erName" value="${req.name||''}" placeholder="שם המוצר *" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      <select id="erCat" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">${catOpts}</select>
+      <input id="erUnit" value="${req.unit||''}" placeholder="יחידת מידה" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      <input id="erPrice" value="${req.price||''}" placeholder="מחיר ₪" type="number" step="0.1" min="0" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <input id="erP" value="${req.p||''}" placeholder="חלבון g" type="number" step="0.1" min="0" style="padding:9px 10px;border-radius:8px;border:1.5px solid rgba(62,207,142,.4);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+        <input id="erC" value="${req.c||''}" placeholder="פחמ' g"  type="number" step="0.1" min="0" style="padding:9px 10px;border-radius:8px;border:1.5px solid rgba(249,160,60,.4);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+        <input id="erF" value="${req.f||''}" placeholder="שומן g"  type="number" step="0.1" min="0" style="padding:9px 10px;border-radius:8px;border:1.5px solid rgba(228,88,88,.4);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%">
+      </div>
+      <textarea id="erNote" placeholder="הערה" rows="2" style="padding:9px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;resize:none;width:100%">${req.note||''}</textarea>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('editReqModal').remove()" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid var(--brd);background:transparent;color:var(--txt);font-size:.85rem;cursor:pointer">ביטול</button>
+        <button onclick="saveEditedRequest('${id}')" style="flex:2;padding:9px;border-radius:8px;border:none;background:var(--grn);color:#fff;font-weight:700;font-size:.85rem;cursor:pointer">שמור</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function saveEditedRequest(id){
+  const reqs=loadRequests();
+  const idx=reqs.findIndex(r=>r.id===id);
+  if(idx===-1)return;
+  reqs[idx]={...reqs[idx],
+    name:(g('erName').value||'').trim()||reqs[idx].name,
+    cat:g('erCat').value,
+    unit:(g('erUnit').value||'').trim(),
+    price:g('erPrice').value,
+    p:g('erP').value,
+    c:g('erC').value,
+    f:g('erF').value,
+    note:(g('erNote').value||'').trim()};
+  saveRequests(reqs);
+  document.getElementById('editReqModal').remove();
+  renderRequests();
+}
 </script>
 </body>
 </html>
