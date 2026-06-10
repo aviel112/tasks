@@ -651,7 +651,7 @@ function saveRequests(r){try{localStorage.setItem(REQ_KEY,JSON.stringify(r))}cat
 function updateReqBadge(){
   const n=loadRequests().length;
   const b=g('adminBtn');
-  b.textContent=n>0?`⚙️ (${n})`:'⚙️';
+  b.textContent=admUnlocked&&n>0?`⚙️ (${n})`:'⚙️';
 }
 
 function openRequestModal(){
