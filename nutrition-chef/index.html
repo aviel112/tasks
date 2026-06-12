@@ -102,7 +102,12 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
   </header>
   <div class="sub">סמן מה יש לך בבית — קבל יום אכילה שלם, מאוזן ומדויק</div>
 
-  <div class="step">
+  <div class="goals" style="margin-bottom:14px;grid-template-columns:1fr 1fr">
+    <button class="goal active" data-mode="day" onclick="pickMode('day')"><span class="gi">📅</span>יום שלם</button>
+    <button class="goal" data-mode="meal" onclick="pickMode('meal')"><span class="gi">🍽️</span>ארוחה לפי ערכים</button>
+  </div>
+
+  <div class="step" id="dayGoalStep">
     <h2><span class="stepnum">1</span> מה המטרה שלך ?</h2>
     <div class="hint">זה קובע כמה קלוריות וחלבון נכניס לתפריט</div>
     <div class="goals">
@@ -110,6 +115,26 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
       <button class="goal active" data-goal="keep" onclick="pickGoal('keep')"><span class="gi">⚖️</span>שמירה<span class="gd">~2200 קל'</span></button>
       <button class="goal" data-goal="bulk" onclick="pickGoal('bulk')"><span class="gi">💪</span>מסה<span class="gd">~2800 קל'</span></button>
     </div>
+  </div>
+
+  <div class="step" id="mealGoalStep" style="display:none">
+    <h2><span class="stepnum">1</span> כמה חסר לך היום ?</h2>
+    <div class="hint">רשום כמה חלבון, פחמימה ושומן נשאר לך להשלים — ונבנה ארוחה אחת מדויקת</div>
+    <div class="mgrid">
+      <div>
+        <div class="mlabel" style="margin-bottom:4px;color:var(--prot);font-weight:700">חלבון (גרם)</div>
+        <input id="mP" type="number" min="0" step="1" placeholder="100" oninput="updateMealKcal()" style="padding:10px 12px;border-radius:8px;border:1.5px solid rgba(62,207,142,.4);background:var(--surf2);color:var(--txt);font-size:.9rem;font-family:inherit;width:100%">
+      </div>
+      <div>
+        <div class="mlabel" style="margin-bottom:4px;color:var(--carb);font-weight:700">פחמימה (גרם)</div>
+        <input id="mC" type="number" min="0" step="1" placeholder="50" oninput="updateMealKcal()" style="padding:10px 12px;border-radius:8px;border:1.5px solid rgba(249,160,60,.4);background:var(--surf2);color:var(--txt);font-size:.9rem;font-family:inherit;width:100%">
+      </div>
+      <div>
+        <div class="mlabel" style="margin-bottom:4px;color:var(--fat);font-weight:700">שומן (גרם)</div>
+        <input id="mF" type="number" min="0" step="1" placeholder="20" oninput="updateMealKcal()" style="padding:10px 12px;border-radius:8px;border:1.5px solid rgba(228,88,88,.4);background:var(--surf2);color:var(--txt);font-size:.9rem;font-family:inherit;width:100%">
+      </div>
+    </div>
+    <div id="mealKcal" style="text-align:center;font-size:.78rem;color:var(--mut);margin-top:10px">= 0 קלוריות</div>
   </div>
 
   <div class="step">
@@ -163,6 +188,14 @@ const FOODS=[
   {id:'tuna',   name:'טונה במים',      role:'protein', unit:'קופסה',   p:25,  c:0,   f:1.3, meals:['lunch','dinner']},
   {id:'ychse',  name:'גבינה צהובה 9%', role:'protein', unit:'30 גרם',  p:9,   c:0.3, f:5.4, meals:['breakfast','snack']},
   {id:'powder', name:'אבקת חלבון',     role:'protein', unit:'מנה',     p:30,  c:3,   f:1,   meals:['snack','breakfast']},
+  {id:'salmon', name:'סלמון',          role:'protein', unit:'100 גרם', p:20,  c:0,   f:13,  meals:['lunch','dinner']},
+  {id:'turkey', name:'הודו',           role:'protein', unit:'100 גרם', p:22,  c:0,   f:2,   meals:['lunch','dinner']},
+  {id:'whites', name:'חלבוני ביצה',    role:'protein', unit:'100 מ"ל', p:11,  c:0.7, f:0.2, meals:['breakfast','dinner']},
+  {id:'yogurt', name:'יוגורט / סקיר',  role:'protein', unit:'גביע',    p:16,  c:6,   f:0.5, meals:['breakfast','snack']},
+  {id:'tofu',   name:'טופו',           role:'protein', unit:'100 גרם', p:14,  c:2,   f:8,   meals:['lunch','dinner']},
+  {id:'wcheese',name:'גבינה לבנה 5%',  role:'protein', unit:'100 גרם', p:10,  c:3.5, f:5,   meals:['breakfast','snack']},
+  {id:'shrimp', name:'דניס / לברק',    role:'protein', unit:'100 גרם', p:19,  c:0,   f:3,   meals:['lunch','dinner']},
+  {id:'meatb',  name:'בשר טחון רזה',   role:'protein', unit:'100 גרם', p:21,  c:0,   f:9,   meals:['lunch','dinner']},
   {id:'amnon',  name:'דג אמנון',       role:'protein', unit:'200 גרם', p:20,  c:0,   f:4,   meals:['lunch','dinner']},
   {id:'sirloin',name:'סינטה / בקר',    role:'protein', unit:'100 גרם', p:26,  c:0,   f:8,   meals:['lunch','dinner']},
   {id:'pastrm', name:'פסטרמה',         role:'protein', unit:'50 גרם',  p:10,  c:1,   f:1.5, meals:['breakfast','snack']},
@@ -177,6 +210,14 @@ const FOODS=[
   {id:'corn',   name:'קורנפלקס',       role:'carb', unit:'50 גרם',   p:3.5, c:42, f:0.5, meals:['breakfast','snack']},
   {id:'peric',  name:'פריכיות',        role:'carb', unit:'30 גרם',   p:2,   c:24, f:0.3, meals:['snack']},
   {id:'pasta',  name:'פסטה',           role:'carb', unit:'100 גרם (לפני בישול)', p:13, c:72, f:1.5, meals:['lunch','dinner']},
+  {id:'quinoa', name:'קינואה',         role:'carb', unit:'100 גרם (לפני בישול)', p:14, c:64, f:6,  meals:['lunch','dinner']},
+  {id:'cuscus', name:'קוסקוס / פתיתים',role:'carb', unit:'100 גרם (לפני בישול)', p:13, c:72, f:1,  meals:['lunch','dinner']},
+  {id:'burgul', name:'בורגול / כוסמת', role:'carb', unit:'100 גרם (לפני בישול)', p:12, c:68, f:1.5,meals:['lunch','dinner']},
+  {id:'lentil', name:'עדשים',          role:'carb', unit:'100 גרם (לפני בישול)', p:24, c:52, f:1,  meals:['lunch','dinner']},
+  {id:'chickp', name:'חומוס / גרגרים', role:'carb', unit:'100 גרם מבושל', p:9,  c:27, f:3,   meals:['lunch','dinner']},
+  {id:'pita',   name:'פיתה',           role:'carb', unit:'יחידה',   p:7,   c:48, f:1,   meals:['breakfast','lunch','dinner']},
+  {id:'lightbr',name:'לחם קל / דגנים', role:'carb', unit:'פרוסה',   p:3,   c:12, f:0.6, meals:['breakfast','dinner']},
+  {id:'granola',name:'גרנולה',         role:'carb', unit:'50 גרם',  p:5,   c:30, f:8,   meals:['breakfast','snack']},
   // veg
   {id:'tomato', name:'עגבנייה',        role:'veg', unit:'100 גרם', p:0.9, c:3.9, f:0.2, meals:['breakfast','lunch','dinner']},
   {id:'cucumb', name:'מלפפון',         role:'veg', unit:'100 גרם', p:0.7, c:3.6, f:0.1, meals:['breakfast','lunch','dinner']},
@@ -185,11 +226,24 @@ const FOODS=[
   {id:'vegmix', name:'ירקות קפואים',   role:'veg', unit:'150 גרם', p:4.5, c:12,  f:0.8, meals:['lunch','dinner']},
   {id:'banana', name:'בננה',           role:'veg', unit:'יחידה',   p:1.1, c:23,  f:0.3, meals:['breakfast','snack']},
   {id:'straw',  name:'תותים / פירות',  role:'veg', unit:'100 גרם', p:0.8, c:7.7, f:0.3, meals:['snack','breakfast']},
+  {id:'apple',  name:'תפוח',           role:'veg', unit:'יחידה',   p:0.5, c:25,  f:0.3, meals:['snack','breakfast']},
+  {id:'orange', name:'תפוז / קלמנטינה',role:'veg', unit:'יחידה',   p:1,   c:15,  f:0.2, meals:['snack','breakfast']},
+  {id:'carrot', name:'גזר',            role:'veg', unit:'100 גרם', p:0.9, c:10,  f:0.2, meals:['lunch','dinner','snack']},
+  {id:'brocc',  name:'ברוקולי / כרובית',role:'veg',unit:'150 גרם', p:4,   c:8,   f:0.5, meals:['lunch','dinner']},
+  {id:'zucc',   name:'קישוא',          role:'veg', unit:'100 גרם', p:1.2, c:3,   f:0.3, meals:['lunch','dinner']},
+  {id:'mushrm', name:'פטריות',         role:'veg', unit:'100 גרם', p:3,   c:3,   f:0.3, meals:['breakfast','lunch','dinner']},
+  {id:'onion',  name:'בצל',            role:'veg', unit:'יחידה',   p:1.2, c:10,  f:0.1, meals:['lunch','dinner']},
+  {id:'cabbage',name:'כרוב / סלט כרוב',role:'veg', unit:'100 גרם', p:1.3, c:6,   f:0.1, meals:['lunch','dinner']},
   // fat
   {id:'olive',  name:'שמן זית',        role:'fat', unit:'כף',      p:0,   c:0,   f:13.5,meals:['lunch','dinner']},
   {id:'avoc',   name:'אבוקדו',         role:'fat', unit:'½ יחידה', p:2,   c:8.5, f:15,  meals:['breakfast','dinner']},
   {id:'tahini', name:'טחינה',          role:'fat', unit:'30 גרם',  p:5.1, c:6.3, f:15.9,meals:['lunch','dinner']},
   {id:'peanut', name:'חמאת בוטנים',    role:'fat', unit:'30 גרם',  p:7.5, c:6,   f:15,  meals:['breakfast','snack']},
+  {id:'almond', name:'שקדים / אגוזים', role:'fat', unit:'30 גרם',  p:6,   c:6,   f:15,  meals:['snack','breakfast']},
+  {id:'olives', name:'זיתים',          role:'fat', unit:'10 יחידות',p:0.3, c:1,  f:5,   meals:['breakfast','lunch','dinner']},
+  {id:'choc',   name:'שוקולד מריר',    role:'fat', unit:'20 גרם',  p:1.5, c:9,   f:8,   meals:['snack']},
+  {id:'butter', name:'חמאה',           role:'fat', unit:'10 גרם',  p:0.1, c:0,   f:8,   meals:['breakfast']},
+  {id:'cream',  name:'שמנת לבישול',    role:'fat', unit:'50 מ"ל',  p:1.3, c:2,   f:7.5, meals:['lunch','dinner']},
 ];
 
 // estimated macros for custom items without values (per typical portion)
@@ -217,7 +271,22 @@ const SUGGEST={
 };
 
 // ── STATE ──────────────────────────────────────────────────────
+let mode='day';
 let goal='keep';
+
+function pickMode(m){
+  mode=m;
+  document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+  g('dayGoalStep').style.display=m==='day'?'':'none';
+  g('mealGoalStep').style.display=m==='meal'?'':'none';
+  g('genBtn').textContent=m==='day'?'🪄 תרכיב לי יום אכילה':'🪄 תרכיב לי את הארוחה';
+  g('result').innerHTML='';lastPlan=null;
+}
+
+function updateMealKcal(){
+  const p=parseFloat(g('mP').value)||0,c=parseFloat(g('mC').value)||0,f=parseFloat(g('mF').value)||0;
+  g('mealKcal').textContent='= '+Math.round(p*4+c*4+f*9)+' קלוריות';
+}
 let selected=new Set();
 let customs=JSON.parse(localStorage.getItem('chef_customs')||'[]');
 let lastPlan=null;
@@ -282,6 +351,7 @@ const kcal=(p,c,f)=>p*4+c*4+f*9;
 const r1=x=>Math.round(x*2)/2; // round to .5 portions
 
 function generate(){
+  if(mode==='meal'){generateMeal();return;}
   const target=GOALS[goal];
   const pool=allFoods().filter(f=>selected.has(f.id));
   const byRole=role=>pool.filter(f=>f.role===role);
@@ -347,6 +417,63 @@ function generate(){
   renderPlan();
 }
 
+// ── SINGLE MEAL BY MACROS ──────────────────────────────────────
+let mealSeed=0;
+function generateMeal(){
+  const tP=parseFloat(g('mP').value)||0, tC=parseFloat(g('mC').value)||0, tF=parseFloat(g('mF').value)||0;
+  if(tP+tC+tF===0){alert('רשום לפחות ערך אחד — חלבון, פחמימה או שומן');return;}
+  const pool=allFoods().filter(f=>selected.has(f.id));
+  if(!pool.length){alert('סמן קודם מה יש לך בבית');return;}
+  mealSeed++;
+  const rot=arr=>arr.length?arr.map((x,i)=>arr[(i+mealSeed)%arr.length]):arr;
+  const byRole=r=>rot(pool.filter(f=>f.role===r));
+
+  const lines=[];
+  let aP=0,aC=0,aF=0;
+  const add=(f,q)=>{if(q<=0)return;lines.push({f,q});aP+=f.p*q;aC+=f.c*q;aF+=f.f*q;};
+
+  // protein: up to 2 sources
+  if(tP>0){
+    const ps=byRole('protein').slice(0,2);
+    ps.forEach((f,i)=>{
+      const remaining=tP-aP;
+      if(remaining<=3)return;
+      const share=i===0&&ps.length>1?0.65:1;
+      add(f,r1(Math.min(Math.max(remaining*share/Math.max(f.p,1),0.5),3)));
+    });
+  }
+  // carbs: up to 2 sources
+  if(tC>0){
+    const cs=byRole('carb').slice(0,2);
+    cs.forEach(f=>{
+      const remaining=tC-aC;
+      if(remaining<=8)return;
+      add(f,r1(Math.min(Math.max(remaining/Math.max(f.c,1),0.5),2.5)));
+    });
+  }
+  // fat
+  if(tF-aF>4){
+    const fs=byRole('fat').slice(0,2);
+    fs.forEach(f=>{
+      const remaining=tF-aF;
+      if(remaining<=4)return;
+      add(f,r1(Math.min(Math.max(remaining/Math.max(f.f,1),0.5),2)));
+    });
+  }
+  // veg for volume (doesn't chase macros)
+  byRole('veg').slice(0,2).forEach(f=>add(f,1));
+
+  if(!lines.length){alert('אין מספיק מוצרים מתאימים — סמן עוד מוצרים');return;}
+  const TK=kcal(aP,aC,aF);
+  lastPlan={
+    meals:[{id:'custom',name:'🍽️ הארוחה שלך',lines,aP,aC,aF,aK:TK}],
+    TP:aP,TC:aC,TF:aF,TK,
+    target:{label:'ארוחה מותאמת 🎯',kcal:Math.round(tP*4+tC*4+tF*9)},
+    missingRoles:[],mealTargets:{tP,tC,tF},
+  };
+  renderPlan();
+}
+
 function fmtQ(q,unit){
   if(q===1)return unit;
   // "2 × 100 גרם" style but nicer for grams: multiply
@@ -356,7 +483,16 @@ function fmtQ(q,unit){
 }
 
 function renderPlan(){
-  const {meals,TP,TC,TF,TK,target,missingRoles}=lastPlan;
+  const {meals,TP,TC,TF,TK,target,missingRoles,mealTargets}=lastPlan;
+  let hitRow='';
+  if(mealTargets){
+    const hit=(a,t)=>t<=0?'—':(Math.abs(a-t)/t<=0.15?'✓ בול':(a>t?'מעל ב-'+Math.round(a-t)+'g':'חסר '+Math.round(t-a)+'g'));
+    hitRow=`<div style="display:flex;justify-content:space-around;font-size:.62rem;opacity:.9;margin-top:8px;border-top:1px solid rgba(255,255,255,.25);padding-top:8px">
+      <span>יעד חלבון ${mealTargets.tP}g — ${hit(TP,mealTargets.tP)}</span>
+      <span>יעד פחמ' ${mealTargets.tC}g — ${hit(TC,mealTargets.tC)}</span>
+      <span>יעד שומן ${mealTargets.tF}g — ${hit(TF,mealTargets.tF)}</span>
+    </div>`;
+  }
   let html=`
     <div class="totals">
       <div class="tt">📊 סה"כ היום — יעד: ${target.label} (~${target.kcal} קל')</div>
@@ -366,6 +502,7 @@ function renderPlan(){
         <div><div class="tv">${Math.round(TC)}g</div><div class="tl">פחמימות</div></div>
         <div><div class="tv">${Math.round(TF)}g</div><div class="tl">שומן</div></div>
       </div>
+      ${hitRow}
     </div>`;
   html+=meals.map(m=>`
     <div class="meal">
