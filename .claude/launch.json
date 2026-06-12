@@ -1,0 +1,119 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tasks",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7772"
+      ],
+      "port": 7772
+    },
+    {
+      "name": "whatsapp-community",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7773",
+        "--directory",
+        "whatsapp-community"
+      ],
+      "port": 7773
+    },
+    {
+      "name": "research-platform",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7774",
+        "--directory",
+        "instagram_agents/research_platform"
+      ],
+      "port": 7774
+    },
+    {
+      "name": "refresh-server",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "instagram_agents/refresh_server.py"
+      ],
+      "port": 7775
+    },
+    {
+      "name": "workout-builder",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7776",
+        "--directory",
+        "workout-builder"
+      ],
+      "port": 7776
+    },
+    {
+      "name": "body-fat-analyzer",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7777",
+        "--directory",
+        "body-fat-analyzer"
+      ],
+      "port": 7777
+    },
+    {
+      "name": "nutrition-cart",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7778",
+        "--directory",
+        "nutrition-cart"
+      ],
+      "port": 7778
+    },
+    {
+      "name": "landing-15days",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7779",
+        "--directory",
+        "landing-page-15days"
+      ],
+      "port": 7779
+    },
+    {
+      "name": "booking",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7780",
+        "--directory",
+        "booking"
+      ],
+      "port": 7780
+    },
+    {
+      "name": "nutrition-chef",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "7781",
+        "--directory",
+        "nutrition-chef"
+      ],
+      "port": 7781
+    }
+  ]
+}

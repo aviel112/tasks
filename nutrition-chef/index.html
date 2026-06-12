@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>השף האישי שלך 🍳</title>
+<style>
+:root{
+  --bg:#f4f6f9;--surf:#ffffff;--surf2:#eef1f5;--txt:#1a2230;--mut:#7a8699;
+  --brd:#dde3ec;--grn:#16a05d;--grn2:#e7f6ee;--prot:#3ecf8e;--carb:#f9a03c;--fat:#e45858;
+  --shadow:0 2px 14px rgba(20,30,50,.08);
+}
+[data-theme="dark"]{
+  --bg:#0f1420;--surf:#1a2130;--surf2:#232b3d;--txt:#eef1f6;--mut:#8b96a8;
+  --brd:#2e3850;--grn:#1fc06f;--grn2:#16321f;--shadow:0 2px 14px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,'Segoe UI','Heebo',Arial,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;transition:background .25s}
+.wrap{max-width:560px;margin:0 auto;padding:16px 14px 90px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+h1{font-size:1.3rem}
+.sub{font-size:.78rem;color:var(--mut);margin-bottom:16px}
+.tbtn{border:1.5px solid var(--brd);background:var(--surf);color:var(--txt);border-radius:10px;padding:7px 11px;cursor:pointer;font-size:.95rem}
+
+/* steps */
+.step{background:var(--surf);border:1.5px solid var(--brd);border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:var(--shadow)}
+.step h2{font-size:.95rem;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.stepnum{background:var(--grn);color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;flex-shrink:0}
+.hint{font-size:.72rem;color:var(--mut);margin-bottom:12px}
+
+/* goal buttons */
+.goals{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.goal{border:1.5px solid var(--brd);background:var(--surf2);border-radius:12px;padding:12px 6px;text-align:center;cursor:pointer;font-family:inherit;color:var(--txt);font-size:.8rem;font-weight:600;transition:all .15s}
+.goal .gi{font-size:1.4rem;display:block;margin-bottom:4px}
+.goal .gd{font-size:.62rem;color:var(--mut);font-weight:400;display:block;margin-top:3px}
+.goal.active{border-color:var(--grn);background:var(--grn2);box-shadow:0 0 0 2px rgba(22,160,93,.25)}
+
+/* food chips */
+.fcat{font-size:.74rem;font-weight:700;color:var(--mut);margin:12px 0 7px}
+.fcat:first-of-type{margin-top:0}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);border-radius:20px;padding:7px 13px;font-size:.78rem;cursor:pointer;font-family:inherit;transition:all .12s;font-weight:500}
+.chip.on{background:var(--grn);border-color:var(--grn);color:#fff;font-weight:700}
+.chip.custom{border-style:dashed;color:var(--mut)}
+.chip.custom.on{color:#fff;border-style:solid}
+.addbtn{border:1.5px dashed var(--grn);background:transparent;color:var(--grn);border-radius:20px;padding:7px 13px;font-size:.78rem;cursor:pointer;font-family:inherit;font-weight:700}
+
+/* generate */
+.gen{width:100%;padding:15px;border:none;border-radius:14px;background:var(--grn);color:#fff;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(22,160,93,.35);transition:transform .1s}
+.gen:active{transform:scale(.98)}
+.gen:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+
+/* results */
+#result{margin-top:18px}
+.meal{background:var(--surf);border:1.5px solid var(--brd);border-radius:16px;padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
+.meal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.meal-h .mt{font-weight:800;font-size:.95rem}
+.meal-h .mk{font-size:.72rem;color:var(--mut)}
+.ml{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px dashed var(--brd);font-size:.84rem}
+.ml:last-of-type{border-bottom:none}
+.ml .qty{color:var(--mut);font-size:.74rem}
+.mmac{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.mb{font-size:.66rem;padding:3px 9px;border-radius:12px;font-weight:700}
+.mb.p{background:rgba(62,207,142,.15);color:var(--prot)}
+.mb.c{background:rgba(249,160,60,.15);color:var(--carb)}
+.mb.f{background:rgba(228,88,88,.15);color:var(--fat)}
+.mb.k{background:var(--surf2);color:var(--txt)}
+
+.totals{background:linear-gradient(135deg,var(--grn),#0d7a45);border-radius:16px;padding:16px;color:#fff;margin-bottom:12px}
+.totals .tt{font-size:.8rem;opacity:.85;margin-bottom:6px;font-weight:700}
+.trow{display:flex;justify-content:space-around;text-align:center}
+.trow .tv{font-size:1.15rem;font-weight:800}
+.trow .tl{font-size:.62rem;opacity:.8}
+
+.missing{background:var(--surf);border:1.5px solid var(--carb);border-radius:14px;padding:14px;margin-bottom:12px}
+.missing .mh{font-weight:700;font-size:.85rem;margin-bottom:8px}
+.missing .mi{font-size:.78rem;padding:4px 0;display:flex;justify-content:space-between}
+.missing .mi span:last-child{color:var(--mut)}
+
+.share{width:100%;padding:13px;border:none;border-radius:14px;background:#25D366;color:#fff;font-size:.92rem;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px}
+.regen{width:100%;padding:11px;border:1.5px solid var(--brd);border-radius:14px;background:var(--surf);color:var(--txt);font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px}
+
+/* custom modal */
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center;padding:16px}
+.mbox{background:var(--surf);border-radius:16px;padding:20px;width:100%;max-width:340px;display:flex;flex-direction:column;gap:10px}
+.mbox h3{font-size:.95rem;text-align:center}
+.mbox input,.mbox select{padding:10px 12px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;width:100%}
+.mgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.mrow{display:flex;gap:8px}
+.mbtn{flex:1;padding:10px;border-radius:8px;border:none;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit}
+.mbtn.ok{background:var(--grn);color:#fff;flex:2}
+.mbtn.no{background:transparent;border:1.5px solid var(--brd);color:var(--txt)}
+.mlabel{font-size:.68rem;color:var(--mut);margin-bottom:-6px}
+footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;padding-bottom:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🍳 השף האישי שלך</h1>
+    <button class="tbtn" id="themeBtn" onclick="toggleTheme()">🌙</button>
+  </header>
+  <div class="sub">סמן מה יש לך בבית — קבל יום אכילה שלם, מאוזן ומדויק</div>
+
+  <div class="step">
+    <h2><span class="stepnum">1</span> מה המטרה שלך ?</h2>
+    <div class="hint">זה קובע כמה קלוריות וחלבון נכניס לתפריט</div>
+    <div class="goals">
+      <button class="goal" data-goal="cut" onclick="pickGoal('cut')"><span class="gi">🔥</span>חיטוב<span class="gd">~1800 קל'</span></button>
+      <button class="goal active" data-goal="keep" onclick="pickGoal('keep')"><span class="gi">⚖️</span>שמירה<span class="gd">~2200 קל'</span></button>
+      <button class="goal" data-goal="bulk" onclick="pickGoal('bulk')"><span class="gi">💪</span>מסה<span class="gd">~2800 קל'</span></button>
+    </div>
+  </div>
+
+  <div class="step">
+    <h2><span class="stepnum">2</span> מה יש לך בבית ?</h2>
+    <div class="hint">לחץ על כל מה שיש במקרר ובמזווה — ואם משהו חסר ברשימה, הוסף אותו עם ➕</div>
+    <div id="foodArea"></div>
+  </div>
+
+  <button class="gen" id="genBtn" onclick="generate()" disabled>🪄 תרכיב לי יום אכילה</button>
+
+  <div id="result"></div>
+
+  <footer>נבנה ע"י אביאל — אימון אישי בשיטת אחד על אחד 💪</footer>
+</div>
+
+<!-- custom food modal -->
+<div class="modal" id="cModal">
+  <div class="mbox">
+    <h3>➕ הוספת מוצר משלך</h3>
+    <input id="cName" placeholder="שם המוצר *">
+    <select id="cRole">
+      <option value="protein">🥩 חלבון (עוף, דג, גבינה...)</option>
+      <option value="carb">🍚 פחמימה (אורז, לחם, תפו"א...)</option>
+      <option value="veg">🥦 ירק / פרי</option>
+      <option value="fat">🫒 שומן (אגוזים, שמן, טחינה...)</option>
+    </select>
+    <input id="cUnit" placeholder="גודל מנה (למשל: 100 גרם)">
+    <div class="mlabel">ערכים למנה (לא חובה — נשתמש בהערכה לפי הקטגוריה):</div>
+    <div class="mgrid">
+      <input id="cP" type="number" min="0" step="0.1" placeholder="חלבון g">
+      <input id="cC" type="number" min="0" step="0.1" placeholder="פחמ' g">
+      <input id="cF" type="number" min="0" step="0.1" placeholder="שומן g">
+    </div>
+    <div class="mrow">
+      <button class="mbtn no" onclick="closeCustom()">ביטול</button>
+      <button class="mbtn ok" onclick="saveCustom()">הוסף</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const g=id=>document.getElementById(id);
+
+// ── FOODS — portion-based, macros per portion ──────────────────
+// role: protein | carb | veg | fat ; unit = one portion ; step grams for display
+const FOODS=[
+  // protein
+  {id:'chick',  name:'חזה עוף',        role:'protein', unit:'100 גרם', p:21,  c:0,   f:4,   meals:['lunch','dinner']},
+  {id:'eggs',   name:'ביצים',          role:'protein', unit:'ביצה',    p:7.5, c:0.6, f:5,   meals:['breakfast','dinner']},
+  {id:'cott',   name:"קוטג'",          role:'protein', unit:'250 גרם', p:28,  c:9,   f:11,  meals:['breakfast','snack']},
+  {id:'tuna',   name:'טונה במים',      role:'protein', unit:'קופסה',   p:25,  c:0,   f:1.3, meals:['lunch','dinner']},
+  {id:'ychse',  name:'גבינה צהובה 9%', role:'protein', unit:'30 גרם',  p:9,   c:0.3, f:5.4, meals:['breakfast','snack']},
+  {id:'powder', name:'אבקת חלבון',     role:'protein', unit:'מנה',     p:30,  c:3,   f:1,   meals:['snack','breakfast']},
+  {id:'amnon',  name:'דג אמנון',       role:'protein', unit:'200 גרם', p:20,  c:0,   f:4,   meals:['lunch','dinner']},
+  {id:'sirloin',name:'סינטה / בקר',    role:'protein', unit:'100 גרם', p:26,  c:0,   f:8,   meals:['lunch','dinner']},
+  {id:'pastrm', name:'פסטרמה',         role:'protein', unit:'50 גרם',  p:10,  c:1,   f:1.5, meals:['breakfast','snack']},
+  {id:'dessert',name:'מעדן חלבון',     role:'protein', unit:'יחידה',   p:17,  c:8,   f:2,   meals:['snack']},
+  // carbs
+  {id:'rice',   name:'אורז',           role:'carb', unit:'100 גרם (לפני בישול)', p:7,   c:80, f:0.7, meals:['lunch','dinner']},
+  {id:'oats',   name:'שיבולת שועל',    role:'carb', unit:'100 גרם',  p:17,  c:66, f:7,   meals:['breakfast']},
+  {id:'bread',  name:'לחם',            role:'carb', unit:'100 גרם',  p:8,   c:49, f:2,   meals:['breakfast','dinner']},
+  {id:'tort',   name:'טורטייה',        role:'carb', unit:'יחידה',    p:3,   c:21, f:2.5, meals:['lunch','dinner','breakfast']},
+  {id:'potato', name:'תפוח אדמה',      role:'carb', unit:'100 גרם',  p:2,   c:17, f:0.1, meals:['lunch','dinner']},
+  {id:'sweet',  name:'בטטה',           role:'carb', unit:'100 גרם',  p:1.6, c:20, f:0.1, meals:['lunch','dinner']},
+  {id:'corn',   name:'קורנפלקס',       role:'carb', unit:'50 גרם',   p:3.5, c:42, f:0.5, meals:['breakfast','snack']},
+  {id:'peric',  name:'פריכיות',        role:'carb', unit:'30 גרם',   p:2,   c:24, f:0.3, meals:['snack']},
+  {id:'pasta',  name:'פסטה',           role:'carb', unit:'100 גרם (לפני בישול)', p:13, c:72, f:1.5, meals:['lunch','dinner']},
+  // veg
+  {id:'tomato', name:'עגבנייה',        role:'veg', unit:'100 גרם', p:0.9, c:3.9, f:0.2, meals:['breakfast','lunch','dinner']},
+  {id:'cucumb', name:'מלפפון',         role:'veg', unit:'100 גרם', p:0.7, c:3.6, f:0.1, meals:['breakfast','lunch','dinner']},
+  {id:'pepper', name:'גמבה',           role:'veg', unit:'100 גרם', p:1,   c:6,   f:0.3, meals:['breakfast','lunch','dinner']},
+  {id:'leaf',   name:'לקט עלים / חסה', role:'veg', unit:'50 גרם',  p:1.3, c:1.8, f:0.3, meals:['lunch','dinner']},
+  {id:'vegmix', name:'ירקות קפואים',   role:'veg', unit:'150 גרם', p:4.5, c:12,  f:0.8, meals:['lunch','dinner']},
+  {id:'banana', name:'בננה',           role:'veg', unit:'יחידה',   p:1.1, c:23,  f:0.3, meals:['breakfast','snack']},
+  {id:'straw',  name:'תותים / פירות',  role:'veg', unit:'100 גרם', p:0.8, c:7.7, f:0.3, meals:['snack','breakfast']},
+  // fat
+  {id:'olive',  name:'שמן זית',        role:'fat', unit:'כף',      p:0,   c:0,   f:13.5,meals:['lunch','dinner']},
+  {id:'avoc',   name:'אבוקדו',         role:'fat', unit:'½ יחידה', p:2,   c:8.5, f:15,  meals:['breakfast','dinner']},
+  {id:'tahini', name:'טחינה',          role:'fat', unit:'30 גרם',  p:5.1, c:6.3, f:15.9,meals:['lunch','dinner']},
+  {id:'peanut', name:'חמאת בוטנים',    role:'fat', unit:'30 גרם',  p:7.5, c:6,   f:15,  meals:['breakfast','snack']},
+];
+
+// estimated macros for custom items without values (per typical portion)
+const ROLE_DEFAULTS={protein:{p:20,c:2,f:5},carb:{p:4,c:40,f:1},veg:{p:1,c:5,f:0.2},fat:{p:3,c:3,f:14}};
+const ROLE_LABELS={protein:'🥩 חלבונים',carb:'🍚 פחמימות',veg:'🥦 ירקות ופירות',fat:'🫒 שומנים'};
+const MEAL_DEFS=[
+  {id:'breakfast',name:'🌅 ארוחת בוקר', share:.25},
+  {id:'lunch',    name:'☀️ ארוחת צהריים', share:.35},
+  {id:'dinner',   name:'🌙 ארוחת ערב',   share:.30},
+  {id:'snack',    name:'🍌 נשנוש',        share:.10},
+];
+// goal targets: kcal + macro split (protein g, carbs g, fat g)
+const GOALS={
+  cut: {kcal:1800,p:170,c:150,f:55, label:'חיטוב 🔥'},
+  keep:{kcal:2200,p:150,c:230,f:70, label:'שמירה ⚖️'},
+  bulk:{kcal:2800,p:170,c:330,f:85, label:'מסה 💪'},
+};
+
+// suggestions for missing roles (with prices from the cart)
+const SUGGEST={
+  protein:[{n:'חזה עוף',pr:'₪4 ל-100 גרם'},{n:'ביצים',pr:'₪1.2 לביצה'},{n:'טונה במים',pr:'₪5 לקופסה'}],
+  carb:[{n:'אורז',pr:'₪12 לק"ג'},{n:'לחם',pr:'₪18 לכיכר'},{n:'שיבולת שועל',pr:'₪10 לק"ג'}],
+  veg:[{n:'עגבנייה ומלפפון',pr:'₪6-7 לק"ג'},{n:'ירקות קפואים',pr:'~₪12 לשקית'}],
+  fat:[{n:'שמן זית',pr:'~₪0.3 לכף'},{n:'טחינה גולמית',pr:'₪12 ל-500 גרם'}],
+};
+
+// ── STATE ──────────────────────────────────────────────────────
+let goal='keep';
+let selected=new Set();
+let customs=JSON.parse(localStorage.getItem('chef_customs')||'[]');
+let lastPlan=null;
+
+function allFoods(){return FOODS.concat(customs);}
+
+function pickGoal(gl){
+  goal=gl;
+  document.querySelectorAll('.goal').forEach(b=>b.classList.toggle('active',b.dataset.goal===gl));
+  if(lastPlan)generate();
+}
+
+function renderFoods(){
+  const area=g('foodArea');
+  area.innerHTML=['protein','carb','veg','fat'].map(role=>{
+    const chips=allFoods().filter(f=>f.role===role).map(f=>
+      `<button class="chip${selected.has(f.id)?' on':''}${f.custom?' custom':''}" onclick="toggleFood('${f.id}')">${f.name}</button>`
+    ).join('');
+    return `<div class="fcat">${ROLE_LABELS[role]}</div><div class="chips">${chips}
+      <button class="addbtn" onclick="openCustom('${role}')">➕ אחר</button></div>`;
+  }).join('');
+  g('genBtn').disabled=selected.size===0;
+}
+
+function toggleFood(id){
+  selected.has(id)?selected.delete(id):selected.add(id);
+  renderFoods();
+}
+
+// ── CUSTOM FOODS ───────────────────────────────────────────────
+function openCustom(role){
+  g('cRole').value=role==='carb'?'carb':role;
+  g('cModal').style.display='flex';
+  g('cName').focus();
+}
+function closeCustom(){
+  g('cModal').style.display='none';
+  ['cName','cUnit','cP','cC','cF'].forEach(id=>g(id).value='');
+}
+function saveCustom(){
+  const name=(g('cName').value||'').trim();
+  if(!name){alert('נא לרשום שם מוצר');return;}
+  const role=g('cRole').value;
+  const d=ROLE_DEFAULTS[role];
+  const food={
+    id:'cu_'+Date.now(), custom:true, name, role,
+    unit:(g('cUnit').value||'מנה').trim()||'מנה',
+    p:parseFloat(g('cP').value)||d.p,
+    c:parseFloat(g('cC').value)||d.c,
+    f:parseFloat(g('cF').value)||d.f,
+    meals:role==='carb'||role==='protein'?['breakfast','lunch','dinner']:['breakfast','lunch','dinner','snack'],
+  };
+  customs.push(food);
+  localStorage.setItem('chef_customs',JSON.stringify(customs));
+  selected.add(food.id);
+  closeCustom();
+  renderFoods();
+}
+
+// ── PLAN GENERATION ────────────────────────────────────────────
+const kcal=(p,c,f)=>p*4+c*4+f*9;
+const r1=x=>Math.round(x*2)/2; // round to .5 portions
+
+function generate(){
+  const target=GOALS[goal];
+  const pool=allFoods().filter(f=>selected.has(f.id));
+  const byRole=role=>pool.filter(f=>f.role===role);
+
+  // detect missing roles
+  const missingRoles=['protein','carb','veg','fat'].filter(r=>byRole(r).length===0);
+
+  // rotation counters so meals vary
+  const used={};
+  const pickFor=(role,mealId)=>{
+    let cands=byRole(role).filter(f=>f.meals.includes(mealId));
+    if(!cands.length)cands=byRole(role);
+    if(!cands.length)return null;
+    cands.sort((a,b)=>(used[a.id]||0)-(used[b.id]||0));
+    const f=cands[0];
+    used[f.id]=(used[f.id]||0)+1;
+    return f;
+  };
+
+  const meals=MEAL_DEFS.map(md=>{
+    const tP=target.p*md.share, tC=target.c*md.share, tF=target.f*md.share;
+    const lines=[];
+    let aP=0,aC=0,aF=0;
+    // protein anchor
+    const pf=pickFor('protein',md.id);
+    if(pf){
+      let q=r1(Math.min(Math.max(tP/Math.max(pf.p,1),0.5),3));
+      lines.push({f:pf,q});aP+=pf.p*q;aC+=pf.c*q;aF+=pf.f*q;
+    }
+    // carb — main meals only (snack gets fruit instead)
+    if(md.id!=='snack'){
+      const cf=pickFor('carb',md.id);
+      if(cf){
+        let q=r1(Math.min(Math.max((tC-aC)/Math.max(cf.c,1),0.5),2.5));
+        if(q>0){lines.push({f:cf,q});aP+=cf.p*q;aC+=cf.c*q;aF+=cf.f*q;}
+      }
+    }
+    // veg (not snack)
+    if(md.id!=='snack'){
+      const vf=pickFor('veg',md.id);
+      if(vf){
+        let q=r1(Math.min(Math.max(1,(tC-aC)/Math.max(vf.c,1)),2));
+        if(q>0){lines.push({f:vf,q});aP+=vf.p*q;aC+=vf.c*q;aF+=vf.f*q;}
+      }
+    } else {
+      // snack: add fruit if available
+      const vf=byRole('veg').find(f=>f.meals.includes('snack')&&!lines.some(l=>l.f.id===f.id));
+      if(vf){lines.push({f:vf,q:1});aP+=vf.p;aC+=vf.c;aF+=vf.f;}
+    }
+    // fat — only if meal still under fat target
+    if(aF<tF*0.8){
+      const ff=pickFor('fat',md.id);
+      if(ff){
+        let q=r1(Math.min(Math.max((tF-aF)/Math.max(ff.f,1),0.5),1.5));
+        if(q>0){lines.push({f:ff,q});aP+=ff.p*q;aC+=ff.c*q;aF+=ff.f*q;}
+      }
+    }
+    return {...md,lines,aP,aC,aF,aK:kcal(aP,aC,aF)};
+  }).filter(m=>m.lines.length>0);
+
+  const TP=meals.reduce((s,m)=>s+m.aP,0), TC=meals.reduce((s,m)=>s+m.aC,0), TF=meals.reduce((s,m)=>s+m.aF,0);
+  lastPlan={meals,TP,TC,TF,TK:kcal(TP,TC,TF),target,missingRoles};
+  renderPlan();
+}
+
+function fmtQ(q,unit){
+  if(q===1)return unit;
+  // "2 × 100 גרם" style but nicer for grams: multiply
+  const m=unit.match(/^(\d+(?:\.\d+)?)\s*(גרם|מ"ל)(.*)$/);
+  if(m)return (q*parseFloat(m[1]))+' '+m[2]+m[3];
+  return q+' × '+unit;
+}
+
+function renderPlan(){
+  const {meals,TP,TC,TF,TK,target,missingRoles}=lastPlan;
+  let html=`
+    <div class="totals">
+      <div class="tt">📊 סה"כ היום — יעד: ${target.label} (~${target.kcal} קל')</div>
+      <div class="trow">
+        <div><div class="tv">${Math.round(TK)}</div><div class="tl">קלוריות</div></div>
+        <div><div class="tv">${Math.round(TP)}g</div><div class="tl">חלבון</div></div>
+        <div><div class="tv">${Math.round(TC)}g</div><div class="tl">פחמימות</div></div>
+        <div><div class="tv">${Math.round(TF)}g</div><div class="tl">שומן</div></div>
+      </div>
+    </div>`;
+  html+=meals.map(m=>`
+    <div class="meal">
+      <div class="meal-h"><span class="mt">${m.name}</span><span class="mk">${Math.round(m.aK)} קל'</span></div>
+      ${m.lines.map(l=>`<div class="ml"><span>${l.f.name}</span><span class="qty">${fmtQ(l.q,l.f.unit)}</span></div>`).join('')}
+      <div class="mmac">
+        <span class="mb p">חלבון ${Math.round(m.aP)}g</span>
+        <span class="mb c">פחמ' ${Math.round(m.aC)}g</span>
+        <span class="mb f">שומן ${Math.round(m.aF)}g</span>
+      </div>
+    </div>`).join('');
+
+  if(missingRoles.length){
+    html+=`<div class="missing"><div class="mh">🛒 כדי לסגור יום מושלם, שווה לקנות:</div>`+
+      missingRoles.map(r=>SUGGEST[r].slice(0,2).map(s=>
+        `<div class="mi"><span>${ROLE_LABELS[r].split(' ')[1]} — ${s.n}</span><span>${s.pr}</span></div>`).join('')).join('')+
+      `</div>`;
+  }
+
+  html+=`<button class="share" onclick="shareWA()">💬 שלח את התפריט בוואטסאפ</button>
+         <button class="regen" onclick="generate()">🔄 תרכיב לי אפשרות אחרת</button>`;
+  g('result').innerHTML=html;
+  g('result').scrollIntoView({behavior:'smooth'});
+}
+
+function shareWA(){
+  const {meals,TP,TC,TF,TK,target}=lastPlan;
+  let t=`🍳 *התפריט היומי שלי* — ${target.label}\n\n`;
+  meals.forEach(m=>{
+    t+=`*${m.name}* (${Math.round(m.aK)} קל')\n`;
+    m.lines.forEach(l=>{t+=`• ${l.f.name} — ${fmtQ(l.q,l.f.unit)}\n`;});
+    t+='\n';
+  });
+  t+=`📊 *סה"כ:* ${Math.round(TK)} קל' | חלבון ${Math.round(TP)}g | פחמ' ${Math.round(TC)}g | שומן ${Math.round(TF)}g\n\n`;
+  t+='💪 נבנה עם השף האישי של אביאל';
+  window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
+}
+
+// ── THEME ──────────────────────────────────────────────────────
+function toggleTheme(){
+  const d=document.documentElement;
+  const nv=d.dataset.theme==='dark'?'light':'dark';
+  d.dataset.theme=nv;
+  localStorage.setItem('chef_theme',nv);
+  g('themeBtn').textContent=nv==='dark'?'☀️':'🌙';
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const th=localStorage.getItem('chef_theme');
+  if(th==='dark'){document.documentElement.dataset.theme='dark';g('themeBtn').textContent='☀️';}
+  renderFoods();
+});
+</script>
+</body>
+</html>
