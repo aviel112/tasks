@@ -289,12 +289,6 @@ const MEAL_SETS={
      {id:'snack2',type:'snack',name:'🍌 ביניים אחה"צ',share:.13},
      {id:'dinner',type:'dinner',name:'🌙 ארוחת ערב',share:.22}],
 };
-// short coaching tip shown with each goal's plan
-const GOAL_TIPS={
-  cut:'🔥 בחיטוב — חלבון גבוה שומר על השריר, שתייה מרובה מורידה תיאבון. אל תרד מתחת ליעד הקלוריות.',
-  keep:'⚖️ בשמירה — עקביות מנצחת. אותו תפריט בערך כל יום עושה את ההבדל לאורך זמן.',
-  bulk:'💪 במסה — אכילה גם כשאין תיאבון. פחמימות סביב האימון נותנות את הדלק לגדילה.',
-};
 // preset goal targets (used when no bodyweight): kcal + macro split (protein g, carbs g, fat g)
 const GOALS={
   cut: {kcal:1800,p:170,c:150,f:55, label:'חיטוב 🔥'},
@@ -710,14 +704,6 @@ function renderPlan(){
       missingRoles.map(r=>SUGGEST[r].slice(0,2).map(s=>
         `<div class="mi"><span>${ROLE_LABELS[r].split(' ')[1]} — ${s.n}</span><span>${s.pr}</span></div>`).join('')).join('')+
       `</div>`;
-  }
-
-  // water target + coaching tip (day mode)
-  if(dayTargets){
-    const bw=parseFloat((g('bw')||{}).value)||0;
-    const water=bw>=30&&bw<=200?(bw*0.035).toFixed(1):'2.5–3';
-    html+=`<div class="infocard">💧 <b>מים מומלצים:</b> ${water} ליטר ביום</div>`;
-    if(GOAL_TIPS[goal])html+=`<div class="infocard tip">${GOAL_TIPS[goal]}</div>`;
   }
 
   html+=`<button class="share" onclick="shareWA()">💬 שלח את התפריט בוואטסאפ</button>
