@@ -138,7 +138,8 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
   </div>
 
   <div class="step">
-    <h2><span class="stepnum">2</span> מה יש לך בבית ?</h2>
+    <h2 style="justify-content:space-between"><span style="display:flex;align-items:center;gap:8px"><span class="stepnum">2</span> מה יש לך בבית ?</span>
+      <button onclick="clearAll()" style="border:none;background:transparent;color:var(--mut);font-size:.7rem;cursor:pointer;font-family:inherit;text-decoration:underline">נקה הכל</button></h2>
     <div class="hint">לחץ על כל מה שיש במקרר ובמזווה — ואם משהו חסר ברשימה, הוסף אותו עם ➕</div>
     <div id="foodArea"></div>
   </div>
@@ -281,11 +282,13 @@ function pickMode(m){
   g('mealGoalStep').style.display=m==='meal'?'':'none';
   g('genBtn').textContent=m==='day'?'🪄 תרכיב לי יום אכילה':'🪄 תרכיב לי את הארוחה';
   g('result').innerHTML='';lastPlan=null;
+  saveState();
 }
 
 function updateMealKcal(){
   const p=parseFloat(g('mP').value)||0,c=parseFloat(g('mC').value)||0,f=parseFloat(g('mF').value)||0;
   g('mealKcal').textContent='= '+Math.round(p*4+c*4+f*9)+' קלוריות';
+  saveState();
 }
 let selected=new Set();
 let customs=JSON.parse(localStorage.getItem('chef_customs')||'[]');
@@ -295,7 +298,8 @@ function allFoods(){return FOODS.concat(customs);}
 
 function pickGoal(gl){
   goal=gl;
-  document.querySelectorAll('.goal').forEach(b=>b.classList.toggle('active',b.dataset.goal===gl));
+  document.querySelectorAll('.goal[data-goal]').forEach(b=>b.classList.toggle('active',b.dataset.goal===gl));
+  saveState();
   if(lastPlan)generate();
 }
 
@@ -314,6 +318,31 @@ function renderFoods(){
 function toggleFood(id){
   selected.has(id)?selected.delete(id):selected.add(id);
   renderFoods();
+  saveState();
+}
+
+function clearAll(){
+  selected.clear();
+  g('result').innerHTML='';lastPlan=null;
+  renderFoods();saveState();
+}
+
+function saveState(){
+  localStorage.setItem('chef_state',JSON.stringify({
+    sel:[...selected],goal,mode,
+    mP:g('mP').value,mC:g('mC').value,mF:g('mF').value,
+  }));
+}
+function restoreState(){
+  try{
+    const s=JSON.parse(localStorage.getItem('chef_state')||'null');
+    if(!s)return;
+    selected=new Set((s.sel||[]).filter(id=>allFoods().some(f=>f.id===id)));
+    if(s.goal&&GOALS[s.goal]){goal=s.goal;document.querySelectorAll('.goal[data-goal]').forEach(b=>b.classList.toggle('active',b.dataset.goal===goal));}
+    g('mP').value=s.mP||'';g('mC').value=s.mC||'';g('mF').value=s.mF||'';
+    updateMealKcal();
+    if(s.mode==='meal')pickMode('meal');
+  }catch(e){}
 }
 
 // ── CUSTOM FOODS ───────────────────────────────────────────────
@@ -350,6 +379,33 @@ function saveCustom(){
 const kcal=(p,c,f)=>p*4+c*4+f*9;
 const r1=x=>Math.round(x*2)/2; // round to .5 portions
 
+// sensible max portions per item (default 4)
+const MAXQ={eggs:3,yogurt:2,cott:1.5,tuna:2,dessert:2,powder:2,ychse:3,pastrm:2,whites:3,
+  tort:3,pita:2.5,lightbr:4,banana:2,apple:2,orange:3,olive:2,butter:2,choc:1.5,avoc:2,
+  salmon:2.5,chick:3,sirloin:3,amnon:1.5,turkey:3,meatb:3,tofu:2.5,wcheese:2.5,shrimp:2.5};
+const maxQof=f=>f.custom?3:(MAXQ[f.id]||4);
+
+// hill-climb: adjust quantities in 0.5 steps to minimize macro error vs targets
+function tune(lines,tP,tC,tF){
+  const tot=()=>lines.reduce((s,l)=>({p:s.p+l.f.p*l.q,c:s.c+l.f.c*l.q,f:s.f+l.f.f*l.q}),{p:0,c:0,f:0});
+  const err=t=>Math.abs(t.p-tP)/Math.max(tP,5)+Math.abs(t.c-tC)/Math.max(tC,5)+Math.abs(t.f-tF)/Math.max(tF,5);
+  for(let it=0;it<60;it++){
+    let best=null,bestE=err(tot());
+    lines.forEach((l,i)=>{
+      if(l.f.role==='veg')return; // veg is for volume, don't inflate it
+      [-0.5,0.5].forEach(d=>{
+        const nq=l.q+d;
+        if(nq<0.5||nq>maxQof(l.f))return;
+        l.q=nq; const e=err(tot()); l.q=nq-d;
+        if(e<bestE-1e-6){bestE=e;best={i,d};}
+      });
+    });
+    if(!best)break;
+    lines[best.i].q+=best.d;
+  }
+  return tot();
+}
+
 function generate(){
   if(mode==='meal'){generateMeal();return;}
   const target=GOALS[goal];
@@ -378,14 +434,14 @@ function generate(){
     // protein anchor
     const pf=pickFor('protein',md.id);
     if(pf){
-      let q=r1(Math.min(Math.max(tP/Math.max(pf.p,1),0.5),3));
+      let q=r1(Math.min(Math.max(tP/Math.max(pf.p,1),0.5),maxQof(pf)));
       lines.push({f:pf,q});aP+=pf.p*q;aC+=pf.c*q;aF+=pf.f*q;
     }
     // carb — main meals only (snack gets fruit instead)
     if(md.id!=='snack'){
       const cf=pickFor('carb',md.id);
       if(cf){
-        let q=r1(Math.min(Math.max((tC-aC)/Math.max(cf.c,1),0.5),2.5));
+        let q=r1(Math.min(Math.max((tC-aC)/Math.max(cf.c,1),0.5),Math.min(2.5,maxQof(cf))));
         if(q>0){lines.push({f:cf,q});aP+=cf.p*q;aC+=cf.c*q;aF+=cf.f*q;}
       }
     }
@@ -409,6 +465,8 @@ function generate(){
         if(q>0){lines.push({f:ff,q});aP+=ff.p*q;aC+=ff.c*q;aF+=ff.f*q;}
       }
     }
+    const tuned=tune(lines,tP,tC,tF);
+    aP=tuned.p;aC=tuned.c;aF=tuned.f;
     return {...md,lines,aP,aC,aF,aK:kcal(aP,aC,aF)};
   }).filter(m=>m.lines.length>0);
 
@@ -439,7 +497,7 @@ function generateMeal(){
       const remaining=tP-aP;
       if(remaining<=3)return;
       const share=i===0&&ps.length>1?0.65:1;
-      add(f,r1(Math.min(Math.max(remaining*share/Math.max(f.p,1),0.5),3)));
+      add(f,r1(Math.min(Math.max(remaining*share/Math.max(f.p,1),0.5),maxQof(f))));
     });
   }
   // carbs: up to 2 sources
@@ -448,7 +506,7 @@ function generateMeal(){
     cs.forEach(f=>{
       const remaining=tC-aC;
       if(remaining<=8)return;
-      add(f,r1(Math.min(Math.max(remaining/Math.max(f.c,1),0.5),2.5)));
+      add(f,r1(Math.min(Math.max(remaining/Math.max(f.c,1),0.5),Math.min(2.5,maxQof(f)))));
     });
   }
   // fat
@@ -457,13 +515,15 @@ function generateMeal(){
     fs.forEach(f=>{
       const remaining=tF-aF;
       if(remaining<=4)return;
-      add(f,r1(Math.min(Math.max(remaining/Math.max(f.f,1),0.5),2)));
+      add(f,r1(Math.min(Math.max(remaining/Math.max(f.f,1),0.5),Math.min(2,maxQof(f)))));
     });
   }
   // veg for volume (doesn't chase macros)
   byRole('veg').slice(0,2).forEach(f=>add(f,1));
 
   if(!lines.length){alert('אין מספיק מוצרים מתאימים — סמן עוד מוצרים');return;}
+  const tuned=tune(lines,tP,tC,tF);
+  aP=tuned.p;aC=tuned.c;aF=tuned.f;
   const TK=kcal(aP,aC,aF);
   lastPlan={
     meals:[{id:'custom',name:'🍽️ הארוחה שלך',lines,aP,aC,aF,aK:TK}],
@@ -504,10 +564,14 @@ function renderPlan(){
       </div>
       ${hitRow}
     </div>`;
-  html+=meals.map(m=>`
+  html+=meals.map((m,mi)=>`
     <div class="meal">
       <div class="meal-h"><span class="mt">${m.name}</span><span class="mk">${Math.round(m.aK)} קל'</span></div>
-      ${m.lines.map(l=>`<div class="ml"><span>${l.f.name}</span><span class="qty">${fmtQ(l.q,l.f.unit)}</span></div>`).join('')}
+      ${m.lines.map((l,li)=>`<div class="ml"><span>${l.f.name}</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span class="qty">${fmtQ(l.q,l.f.unit)}</span>
+          <button onclick="swapItem(${mi},${li})" title="החלף מוצר" style="border:none;background:var(--surf2);border-radius:8px;padding:3px 7px;cursor:pointer;font-size:.75rem">🔄</button>
+        </span></div>`).join('')}
       <div class="mmac">
         <span class="mb p">חלבון ${Math.round(m.aP)}g</span>
         <span class="mb c">פחמ' ${Math.round(m.aC)}g</span>
@@ -525,7 +589,36 @@ function renderPlan(){
   html+=`<button class="share" onclick="shareWA()">💬 שלח את התפריט בוואטסאפ</button>
          <button class="regen" onclick="generate()">🔄 תרכיב לי אפשרות אחרת</button>`;
   g('result').innerHTML=html;
-  g('result').scrollIntoView({behavior:'smooth'});
+  if(!renderPlan.noScroll)g('result').scrollIntoView({behavior:'smooth'});
+  renderPlan.noScroll=false;
+}
+
+// swap a line's food with the next selected food of the same role
+const swapCount={};
+function swapItem(mi,li){
+  const meal=lastPlan.meals[mi];
+  const line=meal.lines[li];
+  const pool=allFoods().filter(f=>selected.has(f.id)&&f.role===line.f.role&&!meal.lines.some(l=>l.f.id===f.id));
+  if(!pool.length){alert('אין עוד מוצר מסומן מהקטגוריה הזו להחלפה');return;}
+  const key=mi+'_'+li;
+  swapCount[key]=(swapCount[key]||0)+1;
+  const nf=pool[swapCount[key]%pool.length];
+  // keep similar macro contribution: scale qty by dominant macro of the role
+  const dom=line.f.role==='carb'?'c':line.f.role==='fat'?'f':'p';
+  let q=line.f[dom]>0&&nf[dom]>0?r1(line.q*line.f[dom]/nf[dom]):line.q;
+  q=Math.min(Math.max(q,0.5),maxQof(nf));
+  meal.lines[li]={f:nf,q};
+  // recompute meal + totals
+  meal.aP=meal.lines.reduce((s,l)=>s+l.f.p*l.q,0);
+  meal.aC=meal.lines.reduce((s,l)=>s+l.f.c*l.q,0);
+  meal.aF=meal.lines.reduce((s,l)=>s+l.f.f*l.q,0);
+  meal.aK=kcal(meal.aP,meal.aC,meal.aF);
+  lastPlan.TP=lastPlan.meals.reduce((s,m)=>s+m.aP,0);
+  lastPlan.TC=lastPlan.meals.reduce((s,m)=>s+m.aC,0);
+  lastPlan.TF=lastPlan.meals.reduce((s,m)=>s+m.aF,0);
+  lastPlan.TK=kcal(lastPlan.TP,lastPlan.TC,lastPlan.TF);
+  renderPlan.noScroll=true;
+  renderPlan();
 }
 
 function shareWA(){
@@ -552,6 +645,7 @@ function toggleTheme(){
 document.addEventListener('DOMContentLoaded',()=>{
   const th=localStorage.getItem('chef_theme');
   if(th==='dark'){document.documentElement.dataset.theme='dark';g('themeBtn').textContent='☀️';}
+  restoreState();
   renderFoods();
 });
 </script>
