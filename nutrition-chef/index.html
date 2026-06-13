@@ -18,7 +18,7 @@
 body{font-family:-apple-system,'Segoe UI','Heebo',Arial,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;transition:background .25s}
 .wrap{max-width:560px;margin:0 auto;padding:16px 14px 90px}
 header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-h1{font-size:1.3rem}
+h1{font-size:1.3rem;background:linear-gradient(90deg,var(--grn),#2bb673);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .sub{font-size:.78rem;color:var(--mut);margin-bottom:16px}
 .tbtn{border:1.5px solid var(--brd);background:var(--surf);color:var(--txt);border-radius:10px;padding:7px 11px;cursor:pointer;font-size:.95rem}
 
@@ -46,7 +46,7 @@ h1{font-size:1.3rem}
 .addbtn{border:1.5px dashed var(--grn);background:transparent;color:var(--grn);border-radius:20px;padding:7px 13px;font-size:.78rem;cursor:pointer;font-family:inherit;font-weight:700}
 
 /* generate */
-.gen{width:100%;padding:15px;border:none;border-radius:14px;background:var(--grn);color:#fff;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(22,160,93,.35);transition:transform .1s}
+.gen{width:100%;padding:15px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--grn),#0d8a4f);color:#fff;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(22,160,93,.35);transition:transform .1s}
 .gen:active{transform:scale(.98)}
 .gen:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
 
@@ -92,6 +92,15 @@ h1{font-size:1.3rem}
 .mbtn.no{background:transparent;border:1.5px solid var(--brd);color:var(--txt)}
 .mlabel{font-size:.68rem;color:var(--mut);margin-bottom:-6px}
 footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;padding-bottom:10px}
+.infocard{background:var(--surf);border:1.5px solid var(--brd);border-radius:12px;padding:11px 14px;margin-bottom:10px;font-size:.8rem;line-height:1.5}
+.infocard.tip{background:var(--grn2);border-color:var(--grn);color:var(--txt)}
+@media print{
+  body{background:#fff}
+  .tbtn,.share,.regen,#dayGoalStep,#mealGoalStep,.step,.sub,.goals,.infocard.tip,button{display:none!important}
+  .meal,.totals,.infocard{break-inside:avoid;box-shadow:none}
+  .totals{background:#16a05d!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  header{margin-bottom:10px}
+}
 </style>
 </head>
 <body>
@@ -279,6 +288,12 @@ const MEAL_SETS={
      {id:'lunch',type:'lunch',name:'☀️ ארוחת צהריים',share:.30},
      {id:'snack2',type:'snack',name:'🍌 ביניים אחה"צ',share:.13},
      {id:'dinner',type:'dinner',name:'🌙 ארוחת ערב',share:.22}],
+};
+// short coaching tip shown with each goal's plan
+const GOAL_TIPS={
+  cut:'🔥 בחיטוב — חלבון גבוה שומר על השריר, שתייה מרובה מורידה תיאבון. אל תרד מתחת ליעד הקלוריות.',
+  keep:'⚖️ בשמירה — עקביות מנצחת. אותו תפריט בערך כל יום עושה את ההבדל לאורך זמן.',
+  bulk:'💪 במסה — אכילה גם כשאין תיאבון. פחמימות סביב האימון נותנות את הדלק לגדילה.',
 };
 // preset goal targets (used when no bodyweight): kcal + macro split (protein g, carbs g, fat g)
 const GOALS={
@@ -678,6 +693,18 @@ function renderPlan(){
       </div>
     </div>`).join('');
 
+  // calorie gap note (day mode) — if meaningfully short of target
+  if(dayTargets){
+    const gapK=dayTargets.tK-TK, gapP=dayTargets.tP-TP;
+    if(gapK>250||gapP>20){
+      const need=[];
+      if(gapP>20)need.push(`עוד ~${Math.round(gapP)}g חלבון`);
+      if(gapK>250)need.push(`עוד ~${Math.round(gapK)} קל'`);
+      html+=`<div class="missing" style="border-color:var(--carb)"><div class="mh">⚠️ עם מה שסומן לא הגענו ליעד המלא</div>
+        <div class="mi"><span>חסר ${need.join(' · ')}</span><span>סמן עוד מוצרים או הגדל מנות</span></div></div>`;
+    }
+  }
+
   if(missingRoles.length){
     html+=`<div class="missing"><div class="mh">🛒 כדי לסגור יום מושלם, שווה לקנות:</div>`+
       missingRoles.map(r=>SUGGEST[r].slice(0,2).map(s=>
@@ -685,8 +712,19 @@ function renderPlan(){
       `</div>`;
   }
 
+  // water target + coaching tip (day mode)
+  if(dayTargets){
+    const bw=parseFloat((g('bw')||{}).value)||0;
+    const water=bw>=30&&bw<=200?(bw*0.035).toFixed(1):'2.5–3';
+    html+=`<div class="infocard">💧 <b>מים מומלצים:</b> ${water} ליטר ביום</div>`;
+    if(GOAL_TIPS[goal])html+=`<div class="infocard tip">${GOAL_TIPS[goal]}</div>`;
+  }
+
   html+=`<button class="share" onclick="shareWA()">💬 שלח את התפריט בוואטסאפ</button>
-         <button class="regen" onclick="generate()">🔄 תרכיב לי אפשרות אחרת</button>`;
+         <div style="display:flex;gap:8px;margin-top:8px">
+           <button class="regen" style="flex:1;margin-top:0" onclick="generate()">🔄 אפשרות אחרת</button>
+           <button class="regen" style="flex:1;margin-top:0" onclick="window.print()">🖨️ שמור / הדפס</button>
+         </div>`;
   g('result').innerHTML=html;
   if(!renderPlan.noScroll)g('result').scrollIntoView({behavior:'smooth'});
   renderPlan.noScroll=false;
