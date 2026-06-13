@@ -98,7 +98,10 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
 <div class="wrap">
   <header>
     <h1>🍳 השף האישי שלך</h1>
-    <button class="tbtn" id="themeBtn" onclick="toggleTheme()">🌙</button>
+    <div style="display:flex;gap:8px">
+      <button class="tbtn" id="admBtn" onclick="toggleAdmin()" title="ניהול">⚙️</button>
+      <button class="tbtn" id="themeBtn" onclick="toggleTheme()">🌙</button>
+    </div>
   </header>
   <div class="sub">סמן מה יש לך בבית — קבל יום אכילה שלם, מאוזן ומדויק</div>
 
@@ -294,6 +297,11 @@ let selected=new Set();
 let customs=JSON.parse(localStorage.getItem('chef_customs')||'[]');
 let lastPlan=null;
 
+// admin gate — only admin can add foods
+const _k=[52,48,54,57,56].map(c=>String.fromCharCode(c)).join('');
+const _p='0'+_k; // = "040698"
+let admUnlocked=sessionStorage.getItem('chef_adm')==='1';
+
 function allFoods(){return FOODS.concat(customs);}
 
 function pickGoal(gl){
@@ -309,8 +317,8 @@ function renderFoods(){
     const chips=allFoods().filter(f=>f.role===role).map(f=>
       `<button class="chip${selected.has(f.id)?' on':''}${f.custom?' custom':''}" onclick="toggleFood('${f.id}')">${f.name}</button>`
     ).join('');
-    return `<div class="fcat">${ROLE_LABELS[role]}</div><div class="chips">${chips}
-      <button class="addbtn" onclick="openCustom('${role}')">➕ אחר</button></div>`;
+    const addBtn=admUnlocked?`<button class="addbtn" onclick="openCustom('${role}')">➕ אחר</button>`:'';
+    return `<div class="fcat">${ROLE_LABELS[role]}</div><div class="chips">${chips}${addBtn}</div>`;
   }).join('');
   g('genBtn').disabled=selected.size===0;
 }
@@ -325,6 +333,21 @@ function clearAll(){
   selected.clear();
   g('result').innerHTML='';lastPlan=null;
   renderFoods();saveState();
+}
+
+function toggleAdmin(){
+  if(admUnlocked){
+    admUnlocked=false;sessionStorage.removeItem('chef_adm');
+    g('admBtn').textContent='⚙️';
+    renderFoods();
+    return;
+  }
+  const pass=prompt('קוד אדמין:');
+  if(pass===null)return;
+  if(pass!==_p){alert('קוד שגוי');return;}
+  admUnlocked=true;sessionStorage.setItem('chef_adm','1');
+  g('admBtn').textContent='🔓';
+  renderFoods();
 }
 
 function saveState(){
@@ -347,6 +370,7 @@ function restoreState(){
 
 // ── CUSTOM FOODS ───────────────────────────────────────────────
 function openCustom(role){
+  if(!admUnlocked){alert('רק האדמין יכול להוסיף מוצרים');return;}
   g('cRole').value=role==='carb'?'carb':role;
   g('cModal').style.display='flex';
   g('cName').focus();
@@ -645,6 +669,7 @@ function toggleTheme(){
 document.addEventListener('DOMContentLoaded',()=>{
   const th=localStorage.getItem('chef_theme');
   if(th==='dark'){document.documentElement.dataset.theme='dark';g('themeBtn').textContent='☀️';}
+  if(admUnlocked)g('admBtn').textContent='🔓';
   restoreState();
   renderFoods();
 });
