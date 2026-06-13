@@ -151,7 +151,7 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
 
   <div id="result"></div>
 
-  <footer>נבנה ע"י אביאל — אימון אישי בשיטת אחד על אחד 💪</footer>
+  <footer>ערכים תזונתיים לפי מאגרי תזונה מקובלים (משקל נא/יבש)<br>נבנה ע"י אביאל — אימון אישי בשיטת אחד על אחד 💪</footer>
 </div>
 
 <!-- custom food modal -->
@@ -186,29 +186,29 @@ const g=id=>document.getElementById(id);
 // role: protein | carb | veg | fat ; unit = one portion ; step grams for display
 const FOODS=[
   // protein
-  {id:'chick',  name:'חזה עוף',        role:'protein', unit:'100 גרם', p:21,  c:0,   f:4,   meals:['lunch','dinner']},
-  {id:'eggs',   name:'ביצים',          role:'protein', unit:'ביצה',    p:7.5, c:0.6, f:5,   meals:['breakfast','dinner']},
-  {id:'cott',   name:"קוטג'",          role:'protein', unit:'250 גרם', p:28,  c:9,   f:11,  meals:['breakfast','snack']},
-  {id:'tuna',   name:'טונה במים',      role:'protein', unit:'קופסה',   p:25,  c:0,   f:1.3, meals:['lunch','dinner']},
-  {id:'ychse',  name:'גבינה צהובה 9%', role:'protein', unit:'30 גרם',  p:9,   c:0.3, f:5.4, meals:['breakfast','snack']},
-  {id:'powder', name:'אבקת חלבון',     role:'protein', unit:'מנה',     p:30,  c:3,   f:1,   meals:['snack','breakfast']},
-  {id:'salmon', name:'סלמון',          role:'protein', unit:'100 גרם', p:20,  c:0,   f:13,  meals:['lunch','dinner']},
-  {id:'turkey', name:'הודו',           role:'protein', unit:'100 גרם', p:22,  c:0,   f:2,   meals:['lunch','dinner']},
+  {id:'chick',  name:'חזה עוף',        role:'protein', unit:'100 גרם (נא)', p:23,  c:0,   f:2.6, meals:['lunch','dinner']},
+  {id:'eggs',   name:'ביצים',          role:'protein', unit:'ביצה L',  p:6.5, c:0.5, f:5.3, meals:['breakfast','dinner']},
+  {id:'cott',   name:"קוטג' 5%",       role:'protein', unit:'250 גרם', p:27.5,c:8.5, f:12.5,meals:['breakfast','snack']},
+  {id:'tuna',   name:'טונה במים',      role:'protein', unit:'קופסה (סחוט)', p:25,  c:0,   f:1,   meals:['lunch','dinner']},
+  {id:'ychse',  name:'גבינה צהובה 9%', role:'protein', unit:'30 גרם',  p:7.8, c:0.3, f:2.7, meals:['breakfast','snack']},
+  {id:'powder', name:'אבקת חלבון',     role:'protein', unit:'סקופ ~30 גרם', p:24,  c:2,   f:1.5, meals:['snack','breakfast']},
+  {id:'salmon', name:'סלמון',          role:'protein', unit:'100 גרם (נא)', p:20,  c:0,   f:13,  meals:['lunch','dinner']},
+  {id:'turkey', name:'הודו',           role:'protein', unit:'100 גרם (נא)', p:22,  c:0,   f:1.5, meals:['lunch','dinner']},
   {id:'whites', name:'חלבוני ביצה',    role:'protein', unit:'100 מ"ל', p:11,  c:0.7, f:0.2, meals:['breakfast','dinner']},
   {id:'yogurt', name:'יוגורט / סקיר',  role:'protein', unit:'גביע',    p:16,  c:6,   f:0.5, meals:['breakfast','snack']},
-  {id:'tofu',   name:'טופו',           role:'protein', unit:'100 גרם', p:14,  c:2,   f:8,   meals:['lunch','dinner']},
-  {id:'wcheese',name:'גבינה לבנה 5%',  role:'protein', unit:'100 גרם', p:10,  c:3.5, f:5,   meals:['breakfast','snack']},
-  {id:'shrimp', name:'דניס / לברק',    role:'protein', unit:'100 גרם', p:19,  c:0,   f:3,   meals:['lunch','dinner']},
-  {id:'meatb',  name:'בשר טחון רזה',   role:'protein', unit:'100 גרם', p:21,  c:0,   f:9,   meals:['lunch','dinner']},
-  {id:'amnon',  name:'דג אמנון',       role:'protein', unit:'200 גרם', p:20,  c:0,   f:4,   meals:['lunch','dinner']},
-  {id:'sirloin',name:'סינטה / בקר',    role:'protein', unit:'100 גרם', p:26,  c:0,   f:8,   meals:['lunch','dinner']},
-  {id:'pastrm', name:'פסטרמה',         role:'protein', unit:'50 גרם',  p:10,  c:1,   f:1.5, meals:['breakfast','snack']},
+  {id:'tofu',   name:'טופו',           role:'protein', unit:'100 גרם', p:12,  c:2,   f:7,   meals:['lunch','dinner']},
+  {id:'wcheese',name:'גבינה לבנה 5%',  role:'protein', unit:'100 גרם', p:10,  c:3.8, f:5,   meals:['breakfast','snack']},
+  {id:'shrimp', name:'דניס / לברק',    role:'protein', unit:'100 גרם (נא)', p:19,  c:0,   f:3,   meals:['lunch','dinner']},
+  {id:'meatb',  name:'בשר טחון 5%',    role:'protein', unit:'100 גרם (נא)', p:21,  c:0,   f:5,   meals:['lunch','dinner']},
+  {id:'amnon',  name:'דג אמנון',       role:'protein', unit:'200 גרם (נא)', p:40,  c:0,   f:3.4, meals:['lunch','dinner']},
+  {id:'sirloin',name:'סינטה / בקר',    role:'protein', unit:'100 גרם (נא)', p:26,  c:0,   f:8,   meals:['lunch','dinner']},
+  {id:'pastrm', name:'פסטרמה הודו',    role:'protein', unit:'50 גרם',  p:9,   c:1,   f:1.5, meals:['breakfast','snack']},
   {id:'dessert',name:'מעדן חלבון',     role:'protein', unit:'יחידה',   p:17,  c:8,   f:2,   meals:['snack']},
   // carbs
   {id:'rice',   name:'אורז',           role:'carb', unit:'100 גרם (לפני בישול)', p:7,   c:80, f:0.7, meals:['lunch','dinner']},
-  {id:'oats',   name:'שיבולת שועל',    role:'carb', unit:'100 גרם',  p:17,  c:66, f:7,   meals:['breakfast']},
-  {id:'bread',  name:'לחם',            role:'carb', unit:'100 גרם',  p:8,   c:49, f:2,   meals:['breakfast','dinner']},
-  {id:'tort',   name:'טורטייה',        role:'carb', unit:'יחידה',    p:3,   c:21, f:2.5, meals:['lunch','dinner','breakfast']},
+  {id:'oats',   name:'שיבולת שועל',    role:'carb', unit:'100 גרם (יבש)',  p:13,  c:60, f:7,   meals:['breakfast']},
+  {id:'bread',  name:'לחם',            role:'carb', unit:'100 גרם',  p:8,   c:49, f:3,   meals:['breakfast','dinner']},
+  {id:'tort',   name:'טורטייה',        role:'carb', unit:'יחידה',    p:4,   c:24, f:3,   meals:['lunch','dinner','breakfast']},
   {id:'potato', name:'תפוח אדמה',      role:'carb', unit:'100 גרם',  p:2,   c:17, f:0.1, meals:['lunch','dinner']},
   {id:'sweet',  name:'בטטה',           role:'carb', unit:'100 גרם',  p:1.6, c:20, f:0.1, meals:['lunch','dinner']},
   {id:'corn',   name:'קורנפלקס',       role:'carb', unit:'50 גרם',   p:3.5, c:42, f:0.5, meals:['breakfast','snack']},
