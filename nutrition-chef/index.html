@@ -114,9 +114,21 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
     <h2><span class="stepnum">1</span> מה המטרה שלך ?</h2>
     <div class="hint">זה קובע כמה קלוריות וחלבון נכניס לתפריט</div>
     <div class="goals">
-      <button class="goal" data-goal="cut" onclick="pickGoal('cut')"><span class="gi">🔥</span>חיטוב<span class="gd">~1800 קל'</span></button>
-      <button class="goal active" data-goal="keep" onclick="pickGoal('keep')"><span class="gi">⚖️</span>שמירה<span class="gd">~2200 קל'</span></button>
-      <button class="goal" data-goal="bulk" onclick="pickGoal('bulk')"><span class="gi">💪</span>מסה<span class="gd">~2800 קל'</span></button>
+      <button class="goal" data-goal="cut" onclick="pickGoal('cut')"><span class="gi">🔥</span>חיטוב<span class="gd" id="gd-cut">~1800 קל'</span></button>
+      <button class="goal active" data-goal="keep" onclick="pickGoal('keep')"><span class="gi">⚖️</span>שמירה<span class="gd" id="gd-keep">~2200 קל'</span></button>
+      <button class="goal" data-goal="bulk" onclick="pickGoal('bulk')"><span class="gi">💪</span>מסה<span class="gd" id="gd-bulk">~2800 קל'</span></button>
+    </div>
+    <div style="margin-top:14px;display:flex;align-items:center;gap:10px;background:var(--surf2);border-radius:10px;padding:10px 12px">
+      <span style="font-size:.8rem;font-weight:700;white-space:nowrap">⚖️ משקל גוף</span>
+      <input id="bw" type="number" min="30" max="200" step="1" placeholder="לא חובה" oninput="onWeight()" style="flex:1;padding:8px 10px;border-radius:8px;border:1.5px solid var(--brd);background:var(--surf);color:var(--txt);font-size:.85rem;font-family:inherit;width:100%">
+      <span style="font-size:.8rem;color:var(--mut)">ק"ג</span>
+    </div>
+    <div id="bwHint" class="hint" style="margin:8px 0 0">💡 הזן משקל לתפריט מותאם אישית — חלבון לפי 2 גרם לק"ג והקלוריות לפי המטרה</div>
+    <div style="margin-top:12px;font-size:.8rem;font-weight:700">🍽️ כמה ארוחות ביום ?</div>
+    <div class="goals" style="grid-template-columns:1fr 1fr 1fr;margin-top:7px">
+      <button class="goal" data-meals="3" onclick="pickMeals(3)">3 ארוחות</button>
+      <button class="goal active" data-meals="4" onclick="pickMeals(4)">4 ארוחות</button>
+      <button class="goal" data-meals="5" onclick="pickMeals(5)">5 ארוחות</button>
     </div>
   </div>
 
@@ -253,18 +265,46 @@ const FOODS=[
 // estimated macros for custom items without values (per typical portion)
 const ROLE_DEFAULTS={protein:{p:20,c:2,f:5},carb:{p:4,c:40,f:1},veg:{p:1,c:5,f:0.2},fat:{p:3,c:3,f:14}};
 const ROLE_LABELS={protein:'🥩 חלבונים',carb:'🍚 פחמימות',veg:'🥦 ירקות ופירות',fat:'🫒 שומנים'};
-const MEAL_DEFS=[
-  {id:'breakfast',name:'🌅 ארוחת בוקר', share:.25},
-  {id:'lunch',    name:'☀️ ארוחת צהריים', share:.35},
-  {id:'dinner',   name:'🌙 ארוחת ערב',   share:.30},
-  {id:'snack',    name:'🍌 נשנוש',        share:.10},
-];
-// goal targets: kcal + macro split (protein g, carbs g, fat g)
+// meal sets by count — type = which foods qualify (snack foods only in snack slots)
+const MEAL_SETS={
+  3:[{id:'breakfast',type:'breakfast',name:'🌅 ארוחת בוקר',share:.33},
+     {id:'lunch',type:'lunch',name:'☀️ ארוחת צהריים',share:.37},
+     {id:'dinner',type:'dinner',name:'🌙 ארוחת ערב',share:.30}],
+  4:[{id:'breakfast',type:'breakfast',name:'🌅 ארוחת בוקר',share:.25},
+     {id:'lunch',type:'lunch',name:'☀️ ארוחת צהריים',share:.35},
+     {id:'dinner',type:'dinner',name:'🌙 ארוחת ערב',share:.30},
+     {id:'snack',type:'snack',name:'🍌 נשנוש',share:.10}],
+  5:[{id:'breakfast',type:'breakfast',name:'🌅 ארוחת בוקר',share:.22},
+     {id:'snack1',type:'snack',name:'🍎 ביניים בוקר',share:.13},
+     {id:'lunch',type:'lunch',name:'☀️ ארוחת צהריים',share:.30},
+     {id:'snack2',type:'snack',name:'🍌 ביניים אחה"צ',share:.13},
+     {id:'dinner',type:'dinner',name:'🌙 ארוחת ערב',share:.22}],
+};
+// preset goal targets (used when no bodyweight): kcal + macro split (protein g, carbs g, fat g)
 const GOALS={
   cut: {kcal:1800,p:170,c:150,f:55, label:'חיטוב 🔥'},
   keep:{kcal:2200,p:150,c:230,f:70, label:'שמירה ⚖️'},
   bulk:{kcal:2800,p:170,c:330,f:85, label:'מסה 💪'},
 };
+// per-kg coefficients for personalized targets
+const PERKG={
+  cut: {kcal:26, p:2.2, f:0.8, label:'חיטוב 🔥'},
+  keep:{kcal:31, p:1.8, f:0.9, label:'שמירה ⚖️'},
+  bulk:{kcal:38, p:2.0, f:1.0, label:'מסה 💪'},
+};
+// resolve the active target for a goal — personalized if bodyweight set
+function targetFor(gl){
+  const bw=parseFloat((g('bw')||{}).value)||0;
+  if(bw>=30&&bw<=200){
+    const k=PERKG[gl];
+    const kcal=Math.round(bw*k.kcal);
+    const p=Math.round(bw*k.p);
+    const f=Math.round(bw*k.f);
+    const c=Math.max(0,Math.round((kcal-p*4-f*9)/4));
+    return {kcal,p,c,f,label:k.label};
+  }
+  return GOALS[gl];
+}
 
 // suggestions for missing roles (with prices from the cart)
 const SUGGEST={
@@ -277,6 +317,28 @@ const SUGGEST={
 // ── STATE ──────────────────────────────────────────────────────
 let mode='day';
 let goal='keep';
+let mealCount=4;
+
+function pickMeals(n){
+  mealCount=n;
+  document.querySelectorAll('[data-meals]').forEach(b=>b.classList.toggle('active',+b.dataset.meals===n));
+  saveState();
+  if(lastPlan&&mode==='day')generate();
+}
+
+function onWeight(){
+  const bw=parseFloat(g('bw').value)||0;
+  const personal=bw>=30&&bw<=200;
+  ['cut','keep','bulk'].forEach(gl=>{
+    const t=targetFor(gl);
+    g('gd-'+gl).textContent='~'+t.kcal+" קל'";
+  });
+  g('bwHint').textContent=personal
+    ?`✅ תפריט מותאם ל-${bw} ק"ג — חלבון ${targetFor(goal).p}g ביום`
+    :'💡 הזן משקל לתפריט מותאם אישית — חלבון לפי 2 גרם לק"ג והקלוריות לפי המטרה';
+  saveState();
+  if(lastPlan&&mode==='day')generate();
+}
 
 function pickMode(m){
   mode=m;
@@ -307,6 +369,7 @@ function allFoods(){return FOODS.concat(customs);}
 function pickGoal(gl){
   goal=gl;
   document.querySelectorAll('.goal[data-goal]').forEach(b=>b.classList.toggle('active',b.dataset.goal===gl));
+  onWeight();
   saveState();
   if(lastPlan)generate();
 }
@@ -352,7 +415,7 @@ function toggleAdmin(){
 
 function saveState(){
   localStorage.setItem('chef_state',JSON.stringify({
-    sel:[...selected],goal,mode,
+    sel:[...selected],goal,mode,mealCount,bw:g('bw').value,
     mP:g('mP').value,mC:g('mC').value,mF:g('mF').value,
   }));
 }
@@ -362,8 +425,10 @@ function restoreState(){
     if(!s)return;
     selected=new Set((s.sel||[]).filter(id=>allFoods().some(f=>f.id===id)));
     if(s.goal&&GOALS[s.goal]){goal=s.goal;document.querySelectorAll('.goal[data-goal]').forEach(b=>b.classList.toggle('active',b.dataset.goal===goal));}
+    if(s.mealCount)pickMeals(s.mealCount);
+    g('bw').value=s.bw||'';
     g('mP').value=s.mP||'';g('mC').value=s.mC||'';g('mF').value=s.mF||'';
-    updateMealKcal();
+    onWeight();updateMealKcal();
     if(s.mode==='meal')pickMode('meal');
   }catch(e){}
 }
@@ -432,7 +497,7 @@ function tune(lines,tP,tC,tF){
 
 function generate(){
   if(mode==='meal'){generateMeal();return;}
-  const target=GOALS[goal];
+  const target=targetFor(goal);
   const pool=allFoods().filter(f=>selected.has(f.id));
   const byRole=role=>pool.filter(f=>f.role===role);
 
@@ -441,8 +506,8 @@ function generate(){
 
   // rotation counters so meals vary
   const used={};
-  const pickFor=(role,mealId)=>{
-    let cands=byRole(role).filter(f=>f.meals.includes(mealId));
+  const pickFor=(role,mealType)=>{
+    let cands=byRole(role).filter(f=>f.meals.includes(mealType));
     if(!cands.length)cands=byRole(role);
     if(!cands.length)return null;
     cands.sort((a,b)=>(used[a.id]||0)-(used[b.id]||0));
@@ -451,27 +516,28 @@ function generate(){
     return f;
   };
 
-  const meals=MEAL_DEFS.map(md=>{
+  const meals=(MEAL_SETS[mealCount]||MEAL_SETS[4]).map(md=>{
     const tP=target.p*md.share, tC=target.c*md.share, tF=target.f*md.share;
+    const isSnack=md.type==='snack';
     const lines=[];
     let aP=0,aC=0,aF=0;
     // protein anchor
-    const pf=pickFor('protein',md.id);
+    const pf=pickFor('protein',md.type);
     if(pf){
       let q=r1(Math.min(Math.max(tP/Math.max(pf.p,1),0.5),maxQof(pf)));
       lines.push({f:pf,q});aP+=pf.p*q;aC+=pf.c*q;aF+=pf.f*q;
     }
     // carb — main meals only (snack gets fruit instead)
-    if(md.id!=='snack'){
-      const cf=pickFor('carb',md.id);
+    if(!isSnack){
+      const cf=pickFor('carb',md.type);
       if(cf){
         let q=r1(Math.min(Math.max((tC-aC)/Math.max(cf.c,1),0.5),Math.min(2.5,maxQof(cf))));
         if(q>0){lines.push({f:cf,q});aP+=cf.p*q;aC+=cf.c*q;aF+=cf.f*q;}
       }
     }
     // veg (not snack)
-    if(md.id!=='snack'){
-      const vf=pickFor('veg',md.id);
+    if(!isSnack){
+      const vf=pickFor('veg',md.type);
       if(vf){
         let q=r1(Math.min(Math.max(1,(tC-aC)/Math.max(vf.c,1)),2));
         if(q>0){lines.push({f:vf,q});aP+=vf.p*q;aC+=vf.c*q;aF+=vf.f*q;}
@@ -483,7 +549,7 @@ function generate(){
     }
     // fat — only if meal still under fat target
     if(aF<tF*0.8){
-      const ff=pickFor('fat',md.id);
+      const ff=pickFor('fat',md.type);
       if(ff){
         let q=r1(Math.min(Math.max((tF-aF)/Math.max(ff.f,1),0.5),1.5));
         if(q>0){lines.push({f:ff,q});aP+=ff.p*q;aC+=ff.c*q;aF+=ff.f*q;}
@@ -495,7 +561,7 @@ function generate(){
   }).filter(m=>m.lines.length>0);
 
   const TP=meals.reduce((s,m)=>s+m.aP,0), TC=meals.reduce((s,m)=>s+m.aC,0), TF=meals.reduce((s,m)=>s+m.aF,0);
-  lastPlan={meals,TP,TC,TF,TK:kcal(TP,TC,TF),target,missingRoles};
+  lastPlan={meals,TP,TC,TF,TK:kcal(TP,TC,TF),target,missingRoles,dayTargets:{tP:target.p,tC:target.c,tF:target.f,tK:target.kcal}};
   renderPlan();
 }
 
@@ -567,7 +633,7 @@ function fmtQ(q,unit){
 }
 
 function renderPlan(){
-  const {meals,TP,TC,TF,TK,target,missingRoles,mealTargets}=lastPlan;
+  const {meals,TP,TC,TF,TK,target,missingRoles,mealTargets,dayTargets}=lastPlan;
   let hitRow='';
   if(mealTargets){
     const hit=(a,t)=>t<=0?'—':(Math.abs(a-t)/t<=0.15?'✓ בול':(a>t?'מעל ב-'+Math.round(a-t)+'g':'חסר '+Math.round(t-a)+'g'));
@@ -575,6 +641,15 @@ function renderPlan(){
       <span>יעד חלבון ${mealTargets.tP}g — ${hit(TP,mealTargets.tP)}</span>
       <span>יעד פחמ' ${mealTargets.tC}g — ${hit(TC,mealTargets.tC)}</span>
       <span>יעד שומן ${mealTargets.tF}g — ${hit(TF,mealTargets.tF)}</span>
+    </div>`;
+  }
+  if(dayTargets){
+    const bar=(a,t)=>{const pct=t<=0?0:Math.min(100,Math.round(a/t*100));const ok=Math.abs(a-t)/Math.max(t,1)<=0.12;
+      return `<div style="flex:1"><div style="display:flex;justify-content:space-between;font-size:.6rem;opacity:.9;margin-bottom:2px"><span>${Math.round(a)}/${Math.round(t)}g</span><span>${pct}%</span></div>
+      <div style="height:5px;background:rgba(255,255,255,.25);border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${ok?'#bff0d4':'#ffe08a'}"></div></div></div>`;};
+    hitRow=`<div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.25);padding-top:10px">
+      <div style="display:flex;gap:10px">${bar(TP,dayTargets.tP)}${bar(TC,dayTargets.tC)}${bar(TF,dayTargets.tF)}</div>
+      <div style="display:flex;gap:10px;font-size:.58rem;opacity:.85;margin-top:3px"><span style="flex:1;text-align:center">חלבון</span><span style="flex:1;text-align:center">פחמימות</span><span style="flex:1;text-align:center">שומן</span></div>
     </div>`;
   }
   let html=`
@@ -647,7 +722,9 @@ function swapItem(mi,li){
 
 function shareWA(){
   const {meals,TP,TC,TF,TK,target}=lastPlan;
-  let t=`🍳 *התפריט היומי שלי* — ${target.label}\n\n`;
+  const bw=parseFloat((g('bw')||{}).value)||0;
+  const wtxt=(mode==='day'&&bw>=30&&bw<=200)?` (מותאם ל-${bw} ק"ג)`:'';
+  let t=`🍳 *התפריט היומי שלי* — ${target.label}${wtxt}\n\n`;
   meals.forEach(m=>{
     t+=`*${m.name}* (${Math.round(m.aK)} קל')\n`;
     m.lines.forEach(l=>{t+=`• ${l.f.name} — ${fmtQ(l.q,l.f.unit)}\n`;});
