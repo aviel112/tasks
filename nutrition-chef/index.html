@@ -92,6 +92,14 @@ h1{font-size:1.3rem;background:linear-gradient(90deg,var(--grn),#2bb673);-webkit
 .mbtn.no{background:transparent;border:1.5px solid var(--brd);color:var(--txt)}
 .mlabel{font-size:.68rem;color:var(--mut);margin-bottom:-6px}
 footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;padding-bottom:10px}
+.mlname{flex:1;min-width:0}
+.mlctl{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.qbtn{border:1.5px solid var(--brd);background:var(--surf);color:var(--txt);border-radius:7px;width:24px;height:24px;line-height:1;cursor:pointer;font-size:1rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.qbtn:active{background:var(--surf2)}
+.iconbtn{border:none;background:var(--surf2);border-radius:7px;padding:4px 7px;cursor:pointer;font-size:.78rem;color:var(--txt);line-height:1}
+.iconbtn.rm{color:var(--fat);background:transparent}
+.iconbtn:active{opacity:.6}
+.qty{min-width:62px;text-align:center}
 .infocard{background:var(--surf);border:1.5px solid var(--brd);border-radius:12px;padding:11px 14px;margin-bottom:10px;font-size:.8rem;line-height:1.5}
 .infocard.tip{background:var(--grn2);border-color:var(--grn);color:var(--txt)}
 @media print{
@@ -504,74 +512,118 @@ function tune(lines,tP,tC,tF){
   return tot();
 }
 
+// build one meal toward its macro share; `used` carries rotation counts for variety
+function buildMeal(md,target,byRole,used){
+  const tP=target.p*md.share, tC=target.c*md.share, tF=target.f*md.share;
+  const isSnack=md.type==='snack';
+  const lines=[];
+  let aP=0,aC=0,aF=0;
+  const pickFor=(role)=>{
+    let cands=byRole(role).filter(f=>f.meals.includes(md.type));
+    if(!cands.length)cands=byRole(role);
+    if(!cands.length)return null;
+    cands.sort((a,b)=>(used[a.id]||0)-(used[b.id]||0));
+    const f=cands[0];used[f.id]=(used[f.id]||0)+1;return f;
+  };
+  // protein anchor
+  const pf=pickFor('protein');
+  if(pf){
+    let q=r1(Math.min(Math.max(tP/Math.max(pf.p,1),0.5),maxQof(pf)));
+    lines.push({f:pf,q});aP+=pf.p*q;aC+=pf.c*q;aF+=pf.f*q;
+  }
+  // carb — main meals only (snack gets fruit instead)
+  if(!isSnack){
+    const cf=pickFor('carb');
+    if(cf){
+      let q=r1(Math.min(Math.max((tC-aC)/Math.max(cf.c,1),0.5),Math.min(2.5,maxQof(cf))));
+      if(q>0){lines.push({f:cf,q});aP+=cf.p*q;aC+=cf.c*q;aF+=cf.f*q;}
+    }
+  }
+  // veg
+  if(!isSnack){
+    const vf=pickFor('veg');
+    if(vf){
+      let q=r1(Math.min(Math.max(1,(tC-aC)/Math.max(vf.c,1)),2));
+      if(q>0){lines.push({f:vf,q});aP+=vf.p*q;aC+=vf.c*q;aF+=vf.f*q;}
+    }
+  } else {
+    const vf=byRole('veg').filter(f=>f.meals.includes('snack')&&!lines.some(l=>l.f.id===f.id))
+      .sort((a,b)=>(used[a.id]||0)-(used[b.id]||0))[0];
+    if(vf){used[vf.id]=(used[vf.id]||0)+1;lines.push({f:vf,q:1});aP+=vf.p;aC+=vf.c;aF+=vf.f;}
+  }
+  // fat — only if meal still under fat target
+  if(aF<tF*0.8){
+    const ff=pickFor('fat');
+    if(ff){
+      let q=r1(Math.min(Math.max((tF-aF)/Math.max(ff.f,1),0.5),1.5));
+      if(q>0){lines.push({f:ff,q});aP+=ff.p*q;aC+=ff.c*q;aF+=ff.f*q;}
+    }
+  }
+  const tuned=tune(lines,tP,tC,tF);
+  return {...md,lines,aP:tuned.p,aC:tuned.c,aF:tuned.f,aK:kcal(tuned.p,tuned.c,tuned.f)};
+}
+
 function generate(){
   if(mode==='meal'){generateMeal();return;}
   const target=targetFor(goal);
   const pool=allFoods().filter(f=>selected.has(f.id));
   const byRole=role=>pool.filter(f=>f.role===role);
-
-  // detect missing roles
   const missingRoles=['protein','carb','veg','fat'].filter(r=>byRole(r).length===0);
 
-  // rotation counters so meals vary
   const used={};
-  const pickFor=(role,mealType)=>{
-    let cands=byRole(role).filter(f=>f.meals.includes(mealType));
-    if(!cands.length)cands=byRole(role);
-    if(!cands.length)return null;
-    cands.sort((a,b)=>(used[a.id]||0)-(used[b.id]||0));
-    const f=cands[0];
-    used[f.id]=(used[f.id]||0)+1;
-    return f;
-  };
-
-  const meals=(MEAL_SETS[mealCount]||MEAL_SETS[4]).map(md=>{
-    const tP=target.p*md.share, tC=target.c*md.share, tF=target.f*md.share;
-    const isSnack=md.type==='snack';
-    const lines=[];
-    let aP=0,aC=0,aF=0;
-    // protein anchor
-    const pf=pickFor('protein',md.type);
-    if(pf){
-      let q=r1(Math.min(Math.max(tP/Math.max(pf.p,1),0.5),maxQof(pf)));
-      lines.push({f:pf,q});aP+=pf.p*q;aC+=pf.c*q;aF+=pf.f*q;
-    }
-    // carb — main meals only (snack gets fruit instead)
-    if(!isSnack){
-      const cf=pickFor('carb',md.type);
-      if(cf){
-        let q=r1(Math.min(Math.max((tC-aC)/Math.max(cf.c,1),0.5),Math.min(2.5,maxQof(cf))));
-        if(q>0){lines.push({f:cf,q});aP+=cf.p*q;aC+=cf.c*q;aF+=cf.f*q;}
-      }
-    }
-    // veg (not snack)
-    if(!isSnack){
-      const vf=pickFor('veg',md.type);
-      if(vf){
-        let q=r1(Math.min(Math.max(1,(tC-aC)/Math.max(vf.c,1)),2));
-        if(q>0){lines.push({f:vf,q});aP+=vf.p*q;aC+=vf.c*q;aF+=vf.f*q;}
-      }
-    } else {
-      // snack: add fruit if available
-      const vf=byRole('veg').find(f=>f.meals.includes('snack')&&!lines.some(l=>l.f.id===f.id));
-      if(vf){lines.push({f:vf,q:1});aP+=vf.p;aC+=vf.c;aF+=vf.f;}
-    }
-    // fat — only if meal still under fat target
-    if(aF<tF*0.8){
-      const ff=pickFor('fat',md.type);
-      if(ff){
-        let q=r1(Math.min(Math.max((tF-aF)/Math.max(ff.f,1),0.5),1.5));
-        if(q>0){lines.push({f:ff,q});aP+=ff.p*q;aC+=ff.c*q;aF+=ff.f*q;}
-      }
-    }
-    const tuned=tune(lines,tP,tC,tF);
-    aP=tuned.p;aC=tuned.c;aF=tuned.f;
-    return {...md,lines,aP,aC,aF,aK:kcal(aP,aC,aF)};
-  }).filter(m=>m.lines.length>0);
+  const meals=(MEAL_SETS[mealCount]||MEAL_SETS[4])
+    .map(md=>buildMeal(md,target,byRole,used))
+    .filter(m=>m.lines.length>0);
 
   const TP=meals.reduce((s,m)=>s+m.aP,0), TC=meals.reduce((s,m)=>s+m.aC,0), TF=meals.reduce((s,m)=>s+m.aF,0);
   lastPlan={meals,TP,TC,TF,TK:kcal(TP,TC,TF),target,missingRoles,dayTargets:{tP:target.p,tC:target.c,tF:target.f,tK:target.kcal}};
   renderPlan();
+}
+
+// recompute one meal's macros from its lines
+function recomputeMeal(m){
+  m.aP=m.lines.reduce((s,l)=>s+l.f.p*l.q,0);
+  m.aC=m.lines.reduce((s,l)=>s+l.f.c*l.q,0);
+  m.aF=m.lines.reduce((s,l)=>s+l.f.f*l.q,0);
+  m.aK=kcal(m.aP,m.aC,m.aF);
+}
+function recomputeTotals(){
+  lastPlan.TP=lastPlan.meals.reduce((s,m)=>s+m.aP,0);
+  lastPlan.TC=lastPlan.meals.reduce((s,m)=>s+m.aC,0);
+  lastPlan.TF=lastPlan.meals.reduce((s,m)=>s+m.aF,0);
+  lastPlan.TK=kcal(lastPlan.TP,lastPlan.TC,lastPlan.TF);
+}
+
+// regenerate a single meal with variety (deprioritize its current foods)
+function regenMeal(mi){
+  if(!lastPlan||!lastPlan.dayTargets)return;
+  const pool=allFoods().filter(f=>selected.has(f.id));
+  const byRole=role=>pool.filter(f=>f.role===role);
+  const md=lastPlan.meals[mi];
+  const used={};
+  md.lines.forEach(l=>{used[l.f.id]=(used[l.f.id]||0)+2;});
+  const nm=buildMeal(md,targetFor(goal),byRole,used);
+  if(!nm.lines.length)return;
+  lastPlan.meals[mi]=nm;
+  recomputeTotals();
+  renderPlan.noScroll=true;renderPlan();
+}
+
+// manual portion tuning (+/- half a serving)
+function adjustQty(mi,li,d){
+  const line=lastPlan.meals[mi].lines[li];
+  let nq=Math.round((line.q+d)*2)/2;
+  nq=Math.min(Math.max(nq,0.5),maxQof(line.f));
+  line.q=nq;
+  recomputeMeal(lastPlan.meals[mi]);recomputeTotals();
+  renderPlan.noScroll=true;renderPlan();
+}
+function removeLine(mi,li){
+  const meal=lastPlan.meals[mi];
+  if(meal.lines.length<=1)return;
+  meal.lines.splice(li,1);
+  recomputeMeal(meal);recomputeTotals();
+  renderPlan.noScroll=true;renderPlan();
 }
 
 // ── SINGLE MEAL BY MACROS ──────────────────────────────────────
@@ -672,13 +724,22 @@ function renderPlan(){
       </div>
       ${hitRow}
     </div>`;
+  const dayMode=!!dayTargets;
   html+=meals.map((m,mi)=>`
     <div class="meal">
-      <div class="meal-h"><span class="mt">${m.name}</span><span class="mk">${Math.round(m.aK)} קל'</span></div>
-      ${m.lines.map((l,li)=>`<div class="ml"><span>${l.f.name}</span>
+      <div class="meal-h"><span class="mt">${m.name}</span>
         <span style="display:flex;align-items:center;gap:8px">
+          <span class="mk">${Math.round(m.aK)} קל'</span>
+          ${dayMode?`<button onclick="regenMeal(${mi})" title="חדש את הארוחה" class="iconbtn">🔄</button>`:''}
+        </span>
+      </div>
+      ${m.lines.map((l,li)=>`<div class="ml"><span class="mlname">${l.f.name}</span>
+        <span class="mlctl">
+          ${dayMode?`<button onclick="adjustQty(${mi},${li},-0.5)" class="qbtn" title="הקטן">−</button>`:''}
           <span class="qty">${fmtQ(l.q,l.f.unit)}</span>
-          <button onclick="swapItem(${mi},${li})" title="החלף מוצר" style="border:none;background:var(--surf2);border-radius:8px;padding:3px 7px;cursor:pointer;font-size:.75rem">🔄</button>
+          ${dayMode?`<button onclick="adjustQty(${mi},${li},0.5)" class="qbtn" title="הגדל">+</button>`:''}
+          <button onclick="swapItem(${mi},${li})" title="החלף מוצר" class="iconbtn">⇄</button>
+          ${dayMode?`<button onclick="removeLine(${mi},${li})" title="הסר" class="iconbtn rm">✕</button>`:''}
         </span></div>`).join('')}
       <div class="mmac">
         <span class="mb p">חלבון ${Math.round(m.aP)}g</span>
