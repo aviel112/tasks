@@ -2,8 +2,12 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#16a05d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="description" content="השף האישי שלך — תפריט יומי מדויק ממה שיש לך בבית">
 <title>השף האישי שלך 🍳</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>">
 <style>
 :root{
   --bg:#f4f6f9;--surf:#ffffff;--surf2:#eef1f5;--txt:#1a2230;--mut:#7a8699;
@@ -102,6 +106,13 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
 .qty{min-width:62px;text-align:center}
 .infocard{background:var(--surf);border:1.5px solid var(--brd);border-radius:12px;padding:11px 14px;margin-bottom:10px;font-size:.8rem;line-height:1.5}
 .infocard.tip{background:var(--grn2);border-color:var(--grn);color:var(--txt)}
+@media (max-width:420px){
+  .qbtn{width:30px;height:30px}
+  .iconbtn{padding:7px 9px;font-size:.85rem}
+  .qty{min-width:52px;font-size:.72rem}
+  .ml{gap:4px}
+  .mlname{font-size:.8rem}
+}
 @media print{
   body{background:#fff}
   .tbtn,.share,.regen,#dayGoalStep,#mealGoalStep,.step,.sub,.goals,.infocard.tip,button{display:none!important}
@@ -177,6 +188,8 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
   </div>
 
   <button class="gen" id="genBtn" onclick="generate()" disabled>🪄 תרכיב לי יום אכילה</button>
+
+  <div id="menusArea"></div>
 
   <div id="result"></div>
 
@@ -626,6 +639,86 @@ function removeLine(mi,li){
   renderPlan.noScroll=true;renderPlan();
 }
 
+// ── ADD ITEM TO A MEAL ─────────────────────────────────────────
+function openAddLine(mi){
+  const meal=lastPlan.meals[mi];
+  const pool=allFoods().filter(f=>selected.has(f.id)&&!meal.lines.some(l=>l.f.id===f.id));
+  if(!pool.length){alert('כל המוצרים שסימנת כבר בארוחה — סמן עוד מוצרים למעלה');return;}
+  const byRoleHtml=['protein','carb','veg','fat'].map(role=>{
+    const items=pool.filter(f=>f.role===role);
+    if(!items.length)return '';
+    return `<div class="fcat">${ROLE_LABELS[role]}</div><div class="chips">${
+      items.map(f=>`<button class="chip" onclick="addLine(${mi},'${f.id}')">${f.name}</button>`).join('')}</div>`;
+  }).join('');
+  const modal=document.createElement('div');
+  modal.id='addLineModal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML=`<div style="background:var(--surf);border-radius:16px;padding:20px;width:100%;max-width:380px;max-height:75vh;overflow-y:auto;direction:rtl">
+    <div style="font-weight:800;font-size:.95rem;text-align:center;margin-bottom:10px">➕ הוסף מוצר ל${meal.name.replace(/^[^ ]+ /,'')}</div>
+    ${byRoleHtml}
+    <button onclick="document.getElementById('addLineModal').remove()" style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1.5px solid var(--brd);background:transparent;color:var(--txt);font-size:.85rem;cursor:pointer;font-family:inherit">ביטול</button>
+  </div>`;
+  modal.onclick=e=>{if(e.target===modal)modal.remove();};
+  document.body.appendChild(modal);
+}
+function addLine(mi,fid){
+  const f=allFoods().find(x=>x.id===fid);
+  if(!f)return;
+  lastPlan.meals[mi].lines.push({f,q:1});
+  recomputeMeal(lastPlan.meals[mi]);recomputeTotals();
+  const m=document.getElementById('addLineModal');if(m)m.remove();
+  renderPlan.noScroll=true;renderPlan();
+}
+
+// ── SAVED MENUS ────────────────────────────────────────────────
+function savedMenus(){return JSON.parse(localStorage.getItem('chef_menus')||'[]');}
+function saveMenu(){
+  if(!lastPlan)return;
+  const name=prompt('שם לתפריט (למשל: יום אימון, שבת):');
+  if(!name||!name.trim())return;
+  const menus=savedMenus();
+  menus.unshift({
+    id:'menu_'+Date.now(),name:name.trim(),ts:new Date().toLocaleDateString('he-IL'),
+    plan:{
+      meals:lastPlan.meals.map(m=>({id:m.id,type:m.type,name:m.name,share:m.share,lines:m.lines.map(l=>({fid:l.f.id,q:l.q}))})),
+      target:lastPlan.target,dayTargets:lastPlan.dayTargets||null,mealTargets:lastPlan.mealTargets||null,missingRoles:[],
+    },
+  });
+  if(menus.length>12)menus.pop();
+  localStorage.setItem('chef_menus',JSON.stringify(menus));
+  renderMenus();
+  alert('✅ התפריט "'+name.trim()+'" נשמר');
+}
+function loadMenu(id){
+  const menu=savedMenus().find(m=>m.id===id);
+  if(!menu)return;
+  const meals=menu.plan.meals.map(m=>{
+    const lines=m.lines.map(l=>({f:allFoods().find(x=>x.id===l.fid),q:l.q})).filter(l=>l.f);
+    const nm={...m,lines};recomputeMeal(nm);return nm;
+  }).filter(m=>m.lines.length);
+  if(!meals.length){alert('לא ניתן לטעון — המוצרים בתפריט הזה כבר לא קיימים');return;}
+  lastPlan={meals,target:menu.plan.target,dayTargets:menu.plan.dayTargets,mealTargets:menu.plan.mealTargets,missingRoles:[],TP:0,TC:0,TF:0,TK:0};
+  recomputeTotals();
+  renderPlan();
+}
+function deleteMenu(id){
+  if(!confirm('למחוק את התפריט השמור ?'))return;
+  localStorage.setItem('chef_menus',JSON.stringify(savedMenus().filter(m=>m.id!==id)));
+  renderMenus();
+}
+function renderMenus(){
+  const el=g('menusArea');
+  const menus=savedMenus();
+  if(!menus.length){el.innerHTML='';return;}
+  el.innerHTML=`<div class="step" style="margin-top:14px"><h2><span class="stepnum">💾</span> התפריטים השמורים שלי</h2>
+    <div class="hint">לחץ כדי לטעון תפריט שאהבת</div>
+    <div class="chips">${menus.map(m=>
+      `<span style="display:inline-flex;align-items:center;gap:2px">
+        <button class="chip" onclick="loadMenu('${m.id}')">📋 ${m.name}</button>
+        <button class="iconbtn rm" onclick="deleteMenu('${m.id}')" title="מחק">✕</button>
+      </span>`).join('')}</div></div>`;
+}
+
 // ── SINGLE MEAL BY MACROS ──────────────────────────────────────
 let mealSeed=0;
 function generateMeal(){
@@ -741,10 +834,11 @@ function renderPlan(){
           <button onclick="swapItem(${mi},${li})" title="החלף מוצר" class="iconbtn">⇄</button>
           ${dayMode?`<button onclick="removeLine(${mi},${li})" title="הסר" class="iconbtn rm">✕</button>`:''}
         </span></div>`).join('')}
-      <div class="mmac">
+      <div class="mmac" style="align-items:center">
         <span class="mb p">חלבון ${Math.round(m.aP)}g</span>
         <span class="mb c">פחמ' ${Math.round(m.aC)}g</span>
         <span class="mb f">שומן ${Math.round(m.aF)}g</span>
+        ${dayMode?`<button onclick="openAddLine(${mi})" class="iconbtn" style="margin-right:auto;color:var(--grn);font-weight:700">➕ הוסף</button>`:''}
       </div>
     </div>`).join('');
 
@@ -770,7 +864,8 @@ function renderPlan(){
   html+=`<button class="share" onclick="shareWA()">💬 שלח את התפריט בוואטסאפ</button>
          <div style="display:flex;gap:8px;margin-top:8px">
            <button class="regen" style="flex:1;margin-top:0" onclick="generate()">🔄 אפשרות אחרת</button>
-           <button class="regen" style="flex:1;margin-top:0" onclick="window.print()">🖨️ שמור / הדפס</button>
+           <button class="regen" style="flex:1;margin-top:0" onclick="saveMenu()">💾 שמור תפריט</button>
+           <button class="regen" style="flex:1;margin-top:0" onclick="window.print()">🖨️ הדפס</button>
          </div>`;
   g('result').innerHTML=html;
   if(!renderPlan.noScroll)g('result').scrollIntoView({behavior:'smooth'});
@@ -834,6 +929,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(admUnlocked)g('admBtn').textContent='🔓';
   restoreState();
   renderFoods();
+  renderMenus();
 });
 </script>
 </body>
