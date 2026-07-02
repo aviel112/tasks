@@ -118,6 +118,16 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
 .qty{min-width:62px;text-align:center}
 .infocard{background:var(--surf);border:1.5px solid var(--brd);border-radius:12px;padding:11px 14px;margin-bottom:10px;font-size:.8rem;line-height:1.5}
 .infocard.tip{background:var(--grn2);border-color:var(--grn);color:var(--txt)}
+/* sticky live summary */
+#sbar{position:fixed;bottom:0;right:0;left:0;background:var(--surf);border-top:1.5px solid var(--brd);box-shadow:0 -4px 18px rgba(20,30,50,.12);display:none;justify-content:center;align-items:center;gap:14px;padding:11px 12px calc(11px + env(safe-area-inset-bottom));font-size:.78rem;cursor:pointer;z-index:90;direction:rtl}
+#sbar.show{display:flex;animation:rise .3s ease}
+#sbar b{font-weight:800;font-size:.92rem}
+#sbar .sk b{color:var(--txt)}
+#sbar .sp b{color:var(--prot)}
+#sbar .sc b{color:var(--carb)}
+#sbar .sf b{color:var(--fat)}
+#sbar .sd{width:1px;height:18px;background:var(--brd)}
+body.has-sbar .wrap{padding-bottom:150px}
 @media (max-width:420px){
   .qbtn{width:30px;height:30px}
   .iconbtn{padding:7px 9px;font-size:.85rem}
@@ -129,6 +139,7 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
   body{background:#fff}
   .tbtn,.share,.regen,#dayGoalStep,#mealGoalStep,.step,.sub,.goals,.infocard.tip,button{display:none!important}
   .meal,.totals,.infocard{break-inside:avoid;box-shadow:none}
+  #sbar{display:none!important}
   .totals{background:#16a05d!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   header{margin-bottom:10px}
 }
@@ -196,6 +207,7 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
     <h2 style="justify-content:space-between"><span style="display:flex;align-items:center;gap:8px"><span class="stepnum">2</span> מה יש לך בבית ?</span>
       <button onclick="clearAll()" style="border:none;background:transparent;color:var(--mut);font-size:.7rem;cursor:pointer;font-family:inherit;text-decoration:underline">נקה הכל</button></h2>
     <div class="hint">לחץ על כל מה שיש במקרר ובמזווה — ואם משהו חסר ברשימה, הוסף אותו עם ➕</div>
+    <input id="foodSearch" placeholder="🔍 חפש מוצר..." oninput="renderFoods()" style="width:100%;padding:9px 13px;border-radius:10px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-size:.82rem;font-family:inherit;margin-bottom:4px">
     <div id="foodArea"></div>
   </div>
 
@@ -206,6 +218,15 @@ footer{text-align:center;font-size:.68rem;color:var(--mut);margin-top:20px;paddi
   <div id="result"></div>
 
   <footer>ערכים תזונתיים לפי מאגרי תזונה מקובלים (משקל נא/יבש)<br>נבנה ע"י אביאל — אימון אישי בשיטת אחד על אחד 💪</footer>
+</div>
+
+<!-- sticky live summary -->
+<div id="sbar" onclick="g('result').scrollIntoView({behavior:'smooth'})">
+  <span class="sk"><b id="sb-k">0</b> קל'</span>
+  <span class="sd"></span>
+  <span class="sp"><b id="sb-p">0</b>g חלבון</span>
+  <span class="sc"><b id="sb-c">0</b>g פחמ'</span>
+  <span class="sf"><b id="sb-f">0</b>g שומן</span>
 </div>
 
 <!-- custom food modal -->
@@ -401,6 +422,7 @@ function pickMode(m){
   g('mealGoalStep').style.display=m==='meal'?'':'none';
   g('genBtn').textContent=m==='day'?'🪄 תרכיב לי יום אכילה':'🪄 תרכיב לי את הארוחה';
   g('result').innerHTML='';lastPlan=null;
+  updateSbar();
   saveState();
 }
 
@@ -430,13 +452,16 @@ function pickGoal(gl){
 
 function renderFoods(){
   const area=g('foodArea');
+  const q=((g('foodSearch')||{}).value||'').trim();
   area.innerHTML=['protein','carb','veg','fat'].map(role=>{
-    const chips=allFoods().filter(f=>f.role===role).map(f=>
+    const items=allFoods().filter(f=>f.role===role&&(!q||f.name.includes(q)));
+    if(q&&!items.length)return '';
+    const chips=items.map(f=>
       `<button class="chip${selected.has(f.id)?' on':''}${f.custom?' custom':''}" onclick="toggleFood('${f.id}')">${f.name}</button>`
     ).join('');
-    const addBtn=admUnlocked?`<button class="addbtn" onclick="openCustom('${role}')">➕ אחר</button>`:'';
+    const addBtn=(!q&&admUnlocked)?`<button class="addbtn" onclick="openCustom('${role}')">➕ אחר</button>`:'';
     return `<div class="fcat">${ROLE_LABELS[role]}</div><div class="chips">${chips}${addBtn}</div>`;
-  }).join('');
+  }).join('')||'<div class="hint" style="text-align:center;padding:10px">לא נמצא מוצר כזה — האדמין יכול להוסיף אותו</div>';
   g('genBtn').disabled=selected.size===0;
 }
 
@@ -449,6 +474,7 @@ function toggleFood(id){
 function clearAll(){
   selected.clear();
   g('result').innerHTML='';lastPlan=null;
+  updateSbar();
   renderFoods();saveState();
 }
 
@@ -840,6 +866,14 @@ function renderPlan(){
         <div><div class="tv">${Math.round(TC)}g</div><div class="tl">פחמימות</div></div>
         <div><div class="tv">${Math.round(TF)}g</div><div class="tl">שומן</div></div>
       </div>
+      ${TK>0?`<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:12px;background:rgba(255,255,255,.15)">
+        <div style="width:${Math.round(TP*4/TK*100)}%;background:#bff0d4"></div>
+        <div style="width:${Math.round(TC*4/TK*100)}%;background:#ffd9a0"></div>
+        <div style="width:${Math.round(TF*9/TK*100)}%;background:#ffb3b3"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.58rem;opacity:.85;margin-top:4px">
+        <span>חלבון ${Math.round(TP*4/TK*100)}%</span><span>פחמימות ${Math.round(TC*4/TK*100)}%</span><span>שומן ${Math.round(TF*9/TK*100)}%</span>
+      </div>`:''}
       ${hitRow}
     </div>`;
   const dayMode=!!dayTargets;
@@ -893,8 +927,20 @@ function renderPlan(){
            <button class="regen" style="flex:1;margin-top:0" onclick="window.print()">🖨️ הדפס</button>
          </div>`;
   g('result').innerHTML=html;
+  updateSbar();
   if(!renderPlan.noScroll)g('result').scrollIntoView({behavior:'smooth'});
   renderPlan.noScroll=false;
+}
+
+// sticky live summary bar
+function updateSbar(){
+  const bar=g('sbar');
+  if(!lastPlan){bar.classList.remove('show');document.body.classList.remove('has-sbar');return;}
+  g('sb-k').textContent=Math.round(lastPlan.TK);
+  g('sb-p').textContent=Math.round(lastPlan.TP);
+  g('sb-c').textContent=Math.round(lastPlan.TC);
+  g('sb-f').textContent=Math.round(lastPlan.TF);
+  bar.classList.add('show');document.body.classList.add('has-sbar');
 }
 
 // swap a line's food with the next selected food of the same role
