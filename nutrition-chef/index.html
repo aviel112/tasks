@@ -8,6 +8,9 @@
 <meta name="description" content="השף האישי שלך — תפריט יומי מדויק ממה שיש לך בבית">
 <title>השף האישי שלך 🍳</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#f4f6f9;--surf:#ffffff;--surf2:#eef1f5;--txt:#1a2230;--mut:#7a8699;
@@ -19,7 +22,7 @@
   --brd:#2e3850;--grn:#1fc06f;--grn2:#16321f;--shadow:0 2px 14px rgba(0,0,0,.35);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,'Segoe UI','Heebo',Arial,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;transition:background .25s}
+body{font-family:'Heebo',-apple-system,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;transition:background .25s}
 .wrap{max-width:560px;margin:0 auto;padding:16px 14px 90px}
 header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
 h1{font-size:1.3rem;background:linear-gradient(90deg,var(--grn),#2bb673);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
@@ -44,7 +47,8 @@ h1{font-size:1.3rem;background:linear-gradient(90deg,var(--grn),#2bb673);-webkit
 .fcat:first-of-type{margin-top:0}
 .chips{display:flex;flex-wrap:wrap;gap:7px}
 .chip{border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);border-radius:20px;padding:7px 13px;font-size:.78rem;cursor:pointer;font-family:inherit;transition:all .12s;font-weight:500}
-.chip.on{background:var(--grn);border-color:var(--grn);color:#fff;font-weight:700}
+.chip:hover{border-color:var(--grn)}
+.chip.on{background:var(--grn);border-color:var(--grn);color:#fff;font-weight:700;box-shadow:0 2px 8px rgba(22,160,93,.35);transform:translateY(-1px)}
 .chip.custom{border-style:dashed;color:var(--mut)}
 .chip.custom.on{color:#fff;border-style:solid}
 .addbtn{border:1.5px dashed var(--grn);background:transparent;color:var(--grn);border-radius:20px;padding:7px 13px;font-size:.78rem;cursor:pointer;font-family:inherit;font-weight:700}
@@ -56,7 +60,14 @@ h1{font-size:1.3rem;background:linear-gradient(90deg,var(--grn),#2bb673);-webkit
 
 /* results */
 #result{margin-top:18px}
-.meal{background:var(--surf);border:1.5px solid var(--brd);border-radius:16px;padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+#result>*{animation:rise .35s ease both}
+#result>*:nth-child(2){animation-delay:.05s}
+#result>*:nth-child(3){animation-delay:.1s}
+#result>*:nth-child(4){animation-delay:.15s}
+#result>*:nth-child(5){animation-delay:.2s}
+.meal{background:var(--surf);border:1.5px solid var(--brd);border-right:4px solid var(--grn);border-radius:16px;padding:15px;margin-bottom:12px;box-shadow:var(--shadow);transition:box-shadow .2s}
+.meal:hover{box-shadow:0 6px 20px rgba(20,30,50,.12)}
 .meal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .meal-h .mt{font-weight:800;font-size:.95rem}
 .meal-h .mk{font-size:.72rem;color:var(--mut)}
@@ -70,7 +81,8 @@ h1{font-size:1.3rem;background:linear-gradient(90deg,var(--grn),#2bb673);-webkit
 .mb.f{background:rgba(228,88,88,.15);color:var(--fat)}
 .mb.k{background:var(--surf2);color:var(--txt)}
 
-.totals{background:linear-gradient(135deg,var(--grn),#0d7a45);border-radius:16px;padding:16px;color:#fff;margin-bottom:12px}
+.totals{background:linear-gradient(135deg,var(--grn) 0%,#0d7a45 100%);border-radius:16px;padding:18px 16px;color:#fff;margin-bottom:12px;box-shadow:0 6px 22px rgba(22,160,93,.35);position:relative;overflow:hidden}
+.totals::after{content:'';position:absolute;top:-40px;left:-40px;width:120px;height:120px;background:rgba(255,255,255,.08);border-radius:50%}
 .totals .tt{font-size:.8rem;opacity:.85;margin-bottom:6px;font-weight:700}
 .trow{display:flex;justify-content:space-around;text-align:center}
 .trow .tv{font-size:1.15rem;font-weight:800}
@@ -235,9 +247,13 @@ const FOODS=[
   {id:'ychse',  name:'גבינה צהובה 9%', role:'protein', unit:'30 גרם',  p:7.8, c:0.3, f:2.7, meals:['breakfast','snack']},
   {id:'powder', name:'אבקת חלבון',     role:'protein', unit:'סקופ ~30 גרם', p:24,  c:2,   f:1.5, meals:['snack','breakfast']},
   {id:'salmon', name:'סלמון',          role:'protein', unit:'100 גרם (נא)', p:20,  c:0,   f:13,  meals:['lunch','dinner']},
-  {id:'turkey', name:'הודו',           role:'protein', unit:'100 גרם (נא)', p:22,  c:0,   f:1.5, meals:['lunch','dinner']},
+  {id:'turkey', name:'חזה הודו',       role:'protein', unit:'100 גרם (נא)', p:23,  c:0,   f:1.5, meals:['lunch','dinner']},
+  {id:'pargit', name:'פרגית',          role:'protein', unit:'100 גרם (נא)', p:18,  c:0,   f:8,   meals:['lunch','dinner']},
+  {id:'sardin', name:'סרדינים',        role:'protein', unit:'קופסה',   p:20,  c:0,   f:10,  meals:['lunch','dinner']},
+  {id:'edamame',name:'אדממה',          role:'protein', unit:'100 גרם', p:11,  c:9,   f:5,   meals:['lunch','dinner','snack']},
+  {id:'mozz',   name:'מוצרלה',         role:'protein', unit:'30 גרם',  p:6.6, c:0.7, f:6.3, meals:['breakfast','dinner']},
   {id:'whites', name:'חלבוני ביצה',    role:'protein', unit:'100 מ"ל', p:11,  c:0.7, f:0.2, meals:['breakfast','dinner']},
-  {id:'yogurt', name:'יוגורט / סקיר',  role:'protein', unit:'גביע',    p:16,  c:6,   f:0.5, meals:['breakfast','snack']},
+  {id:'yogurt', name:'יוגורט פרו / סקיר',role:'protein', unit:'גביע 200 גרם', p:17,  c:6,   f:0.5, meals:['breakfast','snack']},
   {id:'tofu',   name:'טופו',           role:'protein', unit:'100 גרם', p:12,  c:2,   f:7,   meals:['lunch','dinner']},
   {id:'wcheese',name:'גבינה לבנה 5%',  role:'protein', unit:'100 גרם', p:10,  c:3.8, f:5,   meals:['breakfast','snack']},
   {id:'shrimp', name:'דניס / לברק',    role:'protein', unit:'100 גרם (נא)', p:19,  c:0,   f:3,   meals:['lunch','dinner']},
@@ -259,9 +275,13 @@ const FOODS=[
   {id:'quinoa', name:'קינואה',         role:'carb', unit:'100 גרם (לפני בישול)', p:14, c:64, f:6,  meals:['lunch','dinner']},
   {id:'cuscus', name:'קוסקוס / פתיתים',role:'carb', unit:'100 גרם (לפני בישול)', p:13, c:72, f:1,  meals:['lunch','dinner']},
   {id:'burgul', name:'בורגול / כוסמת', role:'carb', unit:'100 גרם (לפני בישול)', p:12, c:68, f:1.5,meals:['lunch','dinner']},
-  {id:'lentil', name:'עדשים',          role:'carb', unit:'100 גרם (לפני בישול)', p:24, c:52, f:1,  meals:['lunch','dinner']},
+  {id:'lentil', name:'עדשים',          role:'carb', unit:'100 גרם (לפני בישול)', p:24, c:60, f:1,  meals:['lunch','dinner']},
   {id:'chickp', name:'חומוס / גרגרים', role:'carb', unit:'100 גרם מבושל', p:9,  c:27, f:3,   meals:['lunch','dinner']},
-  {id:'pita',   name:'פיתה',           role:'carb', unit:'יחידה',   p:7,   c:48, f:1,   meals:['breakfast','lunch','dinner']},
+  {id:'pita',   name:'פיתה',           role:'carb', unit:'יחידה ~70 גרם', p:6.5, c:40, f:1, meals:['breakfast','lunch','dinner']},
+  {id:'roll',   name:'לחמנייה',        role:'carb', unit:'יחידה',   p:5,   c:30, f:2,   meals:['breakfast','dinner']},
+  {id:'corn2',  name:'תירס',           role:'carb', unit:'100 גרם', p:3.2, c:19, f:1.5, meals:['lunch','dinner']},
+  {id:'peas',   name:'אפונה',          role:'carb', unit:'100 גרם', p:5,   c:14, f:0.4, meals:['lunch','dinner']},
+  {id:'pretzel',name:'בייגלה',         role:'carb', unit:'30 גרם',  p:3,   c:23, f:1,   meals:['snack']},
   {id:'lightbr',name:'לחם קל / דגנים', role:'carb', unit:'פרוסה',   p:3,   c:12, f:0.6, meals:['breakfast','dinner']},
   {id:'granola',name:'גרנולה',         role:'carb', unit:'50 גרם',  p:5,   c:30, f:8,   meals:['breakfast','snack']},
   // veg
@@ -272,8 +292,11 @@ const FOODS=[
   {id:'vegmix', name:'ירקות קפואים',   role:'veg', unit:'150 גרם', p:4.5, c:12,  f:0.8, meals:['lunch','dinner']},
   {id:'banana', name:'בננה',           role:'veg', unit:'יחידה',   p:1.1, c:23,  f:0.3, meals:['breakfast','snack']},
   {id:'straw',  name:'תותים / פירות',  role:'veg', unit:'100 גרם', p:0.8, c:7.7, f:0.3, meals:['snack','breakfast']},
-  {id:'apple',  name:'תפוח',           role:'veg', unit:'יחידה',   p:0.5, c:25,  f:0.3, meals:['snack','breakfast']},
-  {id:'orange', name:'תפוז / קלמנטינה',role:'veg', unit:'יחידה',   p:1,   c:15,  f:0.2, meals:['snack','breakfast']},
+  {id:'apple',  name:'תפוח',           role:'veg', unit:'יחידה בינונית', p:0.5, c:19, f:0.3, meals:['snack','breakfast']},
+  {id:'orange', name:'תפוז / קלמנטינה',role:'veg', unit:'יחידה',   p:1,   c:12,  f:0.2, meals:['snack','breakfast']},
+  {id:'melon',  name:'אבטיח / מלון',   role:'veg', unit:'150 גרם', p:1,   c:12,  f:0.2, meals:['snack']},
+  {id:'grapes', name:'ענבים',          role:'veg', unit:'100 גרם', p:0.6, c:17,  f:0.2, meals:['snack']},
+  {id:'eggplant',name:'חציל',          role:'veg', unit:'100 גרם', p:1,   c:6,   f:0.2, meals:['lunch','dinner']},
   {id:'carrot', name:'גזר',            role:'veg', unit:'100 גרם', p:0.9, c:10,  f:0.2, meals:['lunch','dinner','snack']},
   {id:'brocc',  name:'ברוקולי / כרובית',role:'veg',unit:'150 גרם', p:4,   c:8,   f:0.5, meals:['lunch','dinner']},
   {id:'zucc',   name:'קישוא',          role:'veg', unit:'100 גרם', p:1.2, c:3,   f:0.3, meals:['lunch','dinner']},
@@ -283,7 +306,8 @@ const FOODS=[
   // fat
   {id:'olive',  name:'שמן זית',        role:'fat', unit:'כף',      p:0,   c:0,   f:13.5,meals:['lunch','dinner']},
   {id:'avoc',   name:'אבוקדו',         role:'fat', unit:'½ יחידה', p:2,   c:8.5, f:15,  meals:['breakfast','dinner']},
-  {id:'tahini', name:'טחינה',          role:'fat', unit:'30 גרם',  p:5.1, c:6.3, f:15.9,meals:['lunch','dinner']},
+  {id:'tahini', name:'טחינה גולמית',   role:'fat', unit:'30 גרם',  p:5,   c:3,   f:17,  meals:['lunch','dinner']},
+  {id:'creamch',name:'גבינת שמנת',     role:'fat', unit:'30 גרם',  p:2,   c:1,   f:7,   meals:['breakfast']},
   {id:'peanut', name:'חמאת בוטנים',    role:'fat', unit:'30 גרם',  p:7.5, c:6,   f:15,  meals:['breakfast','snack']},
   {id:'almond', name:'שקדים / אגוזים', role:'fat', unit:'30 גרם',  p:6,   c:6,   f:15,  meals:['snack','breakfast']},
   {id:'olives', name:'זיתים',          role:'fat', unit:'10 יחידות',p:0.3, c:1,  f:5,   meals:['breakfast','lunch','dinner']},
@@ -501,7 +525,8 @@ const r1=x=>Math.round(x*2)/2; // round to .5 portions
 // sensible max portions per item (default 4)
 const MAXQ={eggs:3,yogurt:2,cott:1.5,tuna:2,dessert:2,powder:2,ychse:3,pastrm:2,whites:3,
   tort:3,pita:2.5,lightbr:4,banana:2,apple:2,orange:3,olive:2,butter:2,choc:1.5,avoc:2,
-  salmon:2.5,chick:3,sirloin:3,amnon:1.5,turkey:3,meatb:3,tofu:2.5,wcheese:2.5,shrimp:2.5};
+  salmon:2.5,chick:3,sirloin:3,amnon:1.5,turkey:3,meatb:3,tofu:2.5,wcheese:2.5,shrimp:2.5,
+  pargit:3,sardin:1.5,edamame:2,mozz:3,roll:2,corn2:2,peas:2,pretzel:2,melon:2,grapes:2,eggplant:2,creamch:2};
 const maxQof=f=>f.custom?3:(MAXQ[f.id]||4);
 
 // hill-climb: adjust quantities in 0.5 steps to minimize macro error vs targets
