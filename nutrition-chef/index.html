@@ -149,10 +149,10 @@ body.has-sbar .wrap{padding-bottom:150px}
 
 <!-- GATE SCREEN -->
 <div id="gateScreen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px">
-  <div style="width:100%;max-width:380px;text-align:center">
+  <div style="width:100%;max-width:400px;text-align:center">
     <div style="font-size:2.5rem;margin-bottom:10px">🍳</div>
     <h1 style="font-size:1.4rem;font-weight:900;color:var(--txt);margin-bottom:4px">השף האישי שלך</h1>
-    <p style="font-size:.8rem;color:var(--mut);margin-bottom:24px;line-height:1.5">הזן פרטים כדי לקבל תפריט מותאם אישית</p>
+    <p style="font-size:.8rem;color:var(--mut);margin-bottom:24px;line-height:1.5">הזן פרטים ובחר מה תרצה לעשות</p>
     <div style="display:flex;flex-direction:column;gap:10px;text-align:right">
       <input id="gateFN" placeholder="שם פרטי" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
       <input id="gateLN" placeholder="שם משפחה" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
@@ -160,7 +160,14 @@ body.has-sbar .wrap{padding-bottom:150px}
         <input id="gateAge" type="number" placeholder="גיל" min="10" max="100" style="flex:1;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
         <input id="gatePhone" type="tel" placeholder="טלפון — 05X" style="flex:2;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
       </div>
-      <button onclick="submitGate()" style="width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--grn),#0d8a4f);color:#fff;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(22,160,93,.35);margin-top:6px">יאללה, בוא נתחיל 🚀</button>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button onclick="submitGate('day')" style="flex:1;padding:16px 10px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--grn),#0d8a4f);color:#fff;font-size:.88rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(22,160,93,.35);line-height:1.4">
+          📅<br>תכין לי תפריט<br>בהתאם למה שיש לי
+        </button>
+        <button onclick="submitGate('meal')" style="flex:1;padding:16px 10px;border:none;border-radius:14px;background:linear-gradient(135deg,#f9a03c,#e88a1a);color:#fff;font-size:.88rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(249,160,60,.35);line-height:1.4">
+          🍽️<br>ארוחה<br>לפי ערכים
+        </button>
+      </div>
     </div>
     <p style="font-size:.65rem;color:var(--mut);margin-top:16px">by Aviel Amira · מאמן כושר ויועץ תזונה</p>
   </div>
@@ -1017,7 +1024,7 @@ function toggleTheme(){
   g('themeBtn').textContent=nv==='dark'?'☀️':'🌙';
 }
 // ── LEAD GATE ─────────────────────────────────────────────
-function submitGate(){
+function submitGate(chosenMode){
   const fn=(document.getElementById('gateFN').value||'').trim();
   const ln=(document.getElementById('gateLN').value||'').trim();
   const age=(document.getElementById('gateAge').value||'').trim();
@@ -1029,6 +1036,7 @@ function submitGate(){
   }).catch(function(){});
   document.getElementById('gateScreen').style.display='none';
   document.getElementById('appWrap').style.display='';
+  if(chosenMode)pickMode(chosenMode);
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
