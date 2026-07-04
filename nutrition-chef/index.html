@@ -1038,6 +1038,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   restoreState();
   renderFoods();
   renderMenus();
+  const urlMode=new URLSearchParams(location.search).get('mode');
+  if(urlMode==='meal')pickMode('meal');
+  if(urlMode==='day')pickMode('day');
 });
 </script>
 </body>
