@@ -146,6 +146,27 @@ body.has-sbar .wrap{padding-bottom:150px}
 </style>
 </head>
 <body>
+
+<!-- GATE SCREEN -->
+<div id="gateScreen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="width:100%;max-width:380px;text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:10px">🍳</div>
+    <h1 style="font-size:1.4rem;font-weight:900;color:var(--txt);margin-bottom:4px">השף האישי שלך</h1>
+    <p style="font-size:.8rem;color:var(--mut);margin-bottom:24px;line-height:1.5">הזן פרטים כדי לקבל תפריט מותאם אישית</p>
+    <div style="display:flex;flex-direction:column;gap:10px;text-align:right">
+      <input id="gateFN" placeholder="שם פרטי" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
+      <input id="gateLN" placeholder="שם משפחה" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
+      <div style="display:flex;gap:10px">
+        <input id="gateAge" type="number" placeholder="גיל" min="10" max="100" style="flex:1;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
+        <input id="gatePhone" type="tel" placeholder="טלפון — 05X" style="flex:2;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
+      </div>
+      <button onclick="submitGate()" style="width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--grn),#0d8a4f);color:#fff;font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(22,160,93,.35);margin-top:6px">יאללה, בוא נתחיל 🚀</button>
+    </div>
+    <p style="font-size:.65rem;color:var(--mut);margin-top:16px">by Aviel Amira · מאמן כושר ויועץ תזונה</p>
+  </div>
+</div>
+
+<div id="appWrap" style="display:none">
 <div class="wrap">
   <header>
     <h1>🍳 השף האישי שלך</h1>
@@ -253,6 +274,7 @@ body.has-sbar .wrap{padding-bottom:150px}
     </div>
   </div>
 </div>
+</div><!-- /appWrap -->
 
 <script>
 const g=id=>document.getElementById(id);
@@ -994,6 +1016,21 @@ function toggleTheme(){
   localStorage.setItem('chef_theme',nv);
   g('themeBtn').textContent=nv==='dark'?'☀️':'🌙';
 }
+// ── LEAD GATE ─────────────────────────────────────────────
+function submitGate(){
+  const fn=(document.getElementById('gateFN').value||'').trim();
+  const ln=(document.getElementById('gateLN').value||'').trim();
+  const age=(document.getElementById('gateAge').value||'').trim();
+  const phone=(document.getElementById('gatePhone').value||'').trim();
+  if(!fn||!ln||!age||phone.length<9){alert('נא למלא את כל השדות');return;}
+  fetch('https://aviel-crm-production.up.railway.app/api/leads',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:fn+' '+ln, phone:phone, age:age, funnel:'nutrition-chef', goal:['health']})
+  }).catch(function(){});
+  document.getElementById('gateScreen').style.display='none';
+  document.getElementById('appWrap').style.display='';
+}
+
 document.addEventListener('DOMContentLoaded',()=>{
   const th=localStorage.getItem('chef_theme');
   if(th==='dark'){document.documentElement.dataset.theme='dark';g('themeBtn').textContent='☀️';}
