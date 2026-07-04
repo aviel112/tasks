@@ -150,9 +150,9 @@ body.has-sbar .wrap{padding-bottom:150px}
 <!-- GATE SCREEN -->
 <div id="gateScreen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px">
   <div style="width:100%;max-width:400px;text-align:center">
-    <div style="font-size:2.5rem;margin-bottom:10px">🍳</div>
-    <h1 style="font-size:1.4rem;font-weight:900;color:var(--txt);margin-bottom:4px">השף האישי שלך</h1>
-    <p style="font-size:.8rem;color:var(--mut);margin-bottom:24px;line-height:1.5">הזן פרטים ובחר מה תרצה לעשות</p>
+    <div style="font-size:2.5rem;margin-bottom:10px" id="gateIcon">🍳</div>
+    <h1 style="font-size:1.4rem;font-weight:900;color:var(--txt);margin-bottom:4px" id="gateTitle">השף האישי שלך</h1>
+    <p style="font-size:.8rem;color:var(--mut);margin-bottom:24px;line-height:1.5" id="gateSub">הזן פרטים כדי להתחיל</p>
     <div style="display:flex;flex-direction:column;gap:10px;text-align:right">
       <input id="gateFN" placeholder="שם פרטי" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
       <input id="gateLN" placeholder="שם משפחה" style="width:100%;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
@@ -160,14 +160,7 @@ body.has-sbar .wrap{padding-bottom:150px}
         <input id="gateAge" type="number" placeholder="גיל" min="10" max="100" style="flex:1;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
         <input id="gatePhone" type="tel" placeholder="טלפון — 05X" style="flex:2;padding:13px 14px;border-radius:12px;border:1.5px solid var(--brd);background:var(--surf2);color:var(--txt);font-family:inherit;font-size:.88rem;direction:rtl">
       </div>
-      <div style="display:flex;gap:10px;margin-top:8px">
-        <button onclick="submitGate('day')" style="flex:1;padding:16px 10px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--grn),#0d8a4f);color:#fff;font-size:.88rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(22,160,93,.35);line-height:1.4">
-          📅<br>תכין לי תפריט<br>בהתאם למה שיש לי
-        </button>
-        <button onclick="submitGate('meal')" style="flex:1;padding:16px 10px;border:none;border-radius:14px;background:linear-gradient(135deg,#f9a03c,#e88a1a);color:#fff;font-size:.88rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(249,160,60,.35);line-height:1.4">
-          🍽️<br>ארוחה<br>לפי ערכים
-        </button>
-      </div>
+      <div id="gateBtns" style="margin-top:8px"></div>
     </div>
     <p style="font-size:.65rem;color:var(--mut);margin-top:16px">by Aviel Amira · מאמן כושר ויועץ תזונה</p>
   </div>
@@ -1024,19 +1017,43 @@ function toggleTheme(){
   g('themeBtn').textContent=nv==='dark'?'☀️':'🌙';
 }
 // ── LEAD GATE ─────────────────────────────────────────────
+var gateMode=new URLSearchParams(location.search).get('mode');
+
+(function buildGate(){
+  var icon=document.getElementById('gateIcon');
+  var title=document.getElementById('gateTitle');
+  var sub=document.getElementById('gateSub');
+  var btns=document.getElementById('gateBtns');
+  if(gateMode==='meal'){
+    icon.textContent='🍽️';
+    title.textContent='שף לפי ערכים';
+    sub.textContent='הזן פרטים ותקבל ארוחה מושלמת לפי ערכים תזונתיים';
+    btns.innerHTML='<button onclick="submitGate(\'meal\')" style="width:100%;padding:16px 10px;border:none;border-radius:14px;background:linear-gradient(135deg,#f9a03c,#e88a1a);color:#fff;font-size:.95rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(249,160,60,.35)">🍽️ בנה לי ארוחה לפי ערכים</button>';
+  } else if(gateMode==='day'){
+    icon.textContent='📅';
+    title.textContent='בונה תפריטים';
+    sub.textContent='הזן פרטים ותקבל תפריט יום שלם בהתאם למה שיש לך';
+    btns.innerHTML='<button onclick="submitGate(\'day\')" style="width:100%;padding:16px 10px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--grn),#0d8a4f);color:#fff;font-size:.95rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(22,160,93,.35)">📅 תכין לי תפריט בהתאם למה שיש לי</button>';
+  } else {
+    btns.innerHTML='<div style="display:flex;gap:10px"><button onclick="submitGate(\'day\')" style="flex:1;padding:16px 10px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--grn),#0d8a4f);color:#fff;font-size:.88rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(22,160,93,.35);line-height:1.4">📅<br>תכין לי תפריט<br>בהתאם למה שיש לי</button><button onclick="submitGate(\'meal\')" style="flex:1;padding:16px 10px;border:none;border-radius:14px;background:linear-gradient(135deg,#f9a03c,#e88a1a);color:#fff;font-size:.88rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(249,160,60,.35);line-height:1.4">🍽️<br>ארוחה<br>לפי ערכים</button></div>';
+  }
+})();
+
 function submitGate(chosenMode){
-  const fn=(document.getElementById('gateFN').value||'').trim();
-  const ln=(document.getElementById('gateLN').value||'').trim();
-  const age=(document.getElementById('gateAge').value||'').trim();
-  const phone=(document.getElementById('gatePhone').value||'').trim();
+  var fn=(document.getElementById('gateFN').value||'').trim();
+  var ln=(document.getElementById('gateLN').value||'').trim();
+  var age=(document.getElementById('gateAge').value||'').trim();
+  var phone=(document.getElementById('gatePhone').value||'').trim();
   if(!fn||!ln||!age||phone.length<9){alert('נא למלא את כל השדות');return;}
+  var funnel=gateMode==='meal'?'nutrition-chef-meal':gateMode==='day'?'nutrition-chef-day':'nutrition-chef';
   fetch('https://aviel-crm-production.up.railway.app/api/leads',{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name:fn+' '+ln, phone:phone, age:age, funnel:'nutrition-chef', goal:['health']})
+    body:JSON.stringify({name:fn+' '+ln, phone:phone, age:age, funnel:funnel, goal:['health']})
   }).catch(function(){});
   document.getElementById('gateScreen').style.display='none';
   document.getElementById('appWrap').style.display='';
-  if(chosenMode)pickMode(chosenMode);
+  if(gateMode){document.querySelector('.goals').style.display='none';}
+  pickMode(chosenMode);
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
@@ -1046,9 +1063,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   restoreState();
   renderFoods();
   renderMenus();
-  const urlMode=new URLSearchParams(location.search).get('mode');
-  if(urlMode==='meal')pickMode('meal');
-  if(urlMode==='day')pickMode('day');
 });
 </script>
 </body>
