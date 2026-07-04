@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>תפריט גברים | Aviel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07080f;
+  --accent:#ff6b35;--accent2:#ffc107;
+  --grad:linear-gradient(135deg,#ff6b35,#ffc107);
+  --grad90:linear-gradient(90deg,#ff6b35,#ffc107);
+  --glass:rgba(255,255,255,.04);
+  --border:rgba(255,255,255,.08);
+  --text:#e8e8f0;--text2:#8888a8;--text3:#44445a;
+  --green:#4ade80;--blue:#60a5fa;--red:#ff6b6b;
+  --r:20px;--r-sm:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font-family:'Heebo',sans-serif;direction:rtl;min-height:100vh;font-size:16px;line-height:1.55;overflow-x:hidden}
+
+.orb{position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0;animation:orbDrift ease-in-out infinite alternate}
+.orb1{width:600px;height:600px;top:-200px;right:-150px;background:radial-gradient(circle,rgba(255,107,53,.13),transparent 70%);animation-duration:22s}
+.orb2{width:400px;height:400px;bottom:-100px;left:-100px;background:radial-gradient(circle,rgba(255,193,7,.08),transparent 70%);animation-duration:28s;animation-delay:-8s}
+.orb3{width:280px;height:280px;top:45%;right:25%;background:radial-gradient(circle,rgba(255,107,53,.05),transparent 70%);animation-duration:35s;animation-delay:-4s}
+@keyframes orbDrift{from{transform:translate(0,0) scale(1)}to{transform:translate(35px,45px) scale(1.08)}}
+
+.wrap{max-width:640px;margin:0 auto;padding:0 16px 80px;position:relative;z-index:1}
+
+/* HERO */
+.hero{text-align:center;padding:40px 0 24px;border-bottom:1px solid rgba(255,255,255,.05);margin-bottom:28px}
+.hero-back{display:inline-flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text3);text-decoration:none;margin-bottom:16px;transition:color .2s}
+.hero-back:hover{color:var(--accent)}
+.hero-tag{display:inline-block;padding:4px 14px;border-radius:99px;background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.3);color:var(--accent);font-size:.7rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:14px}
+.logo{font-size:2.8rem;font-weight:900;letter-spacing:10px;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 28px rgba(255,107,53,.4));animation:logoPulse 4s ease-in-out infinite alternate}
+@keyframes logoPulse{from{filter:drop-shadow(0 0 14px rgba(255,107,53,.2))}to{filter:drop-shadow(0 0 38px rgba(255,107,53,.6))}}
+.hero-title{font-size:1.5rem;font-weight:900;color:#fff;margin:12px 0 6px}
+.hero-sub{font-size:.84rem;color:var(--text2)}
+
+/* PROGRESS */
+.step-track{display:flex;align-items:center;justify-content:space-between;position:relative;margin-bottom:28px}
+.step-track::before{content:'';position:absolute;top:21px;left:4%;right:4%;height:1px;background:rgba(255,255,255,.06);z-index:0}
+.sc{width:42px;height:42px;border-radius:50%;z-index:1;display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:900;border:1.5px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text3);transition:all .35s;position:relative;flex-shrink:0}
+.sc.done{background:var(--grad);border-color:transparent;color:#fff;box-shadow:0 0 18px rgba(255,107,53,.45)}
+.sc.active{border-color:var(--accent);color:var(--accent);background:rgba(255,107,53,.1);box-shadow:0 0 0 5px rgba(255,107,53,.1),0 0 22px rgba(255,107,53,.25)}
+.sc-lbl{position:absolute;top:calc(100%+6px);font-size:.56rem;font-weight:700;white-space:nowrap;color:var(--text3);right:50%;transform:translateX(50%)}
+.sc.active .sc-lbl,.sc.done .sc-lbl{color:var(--accent)}
+.sf{flex:1;height:2px;margin:0 4px;border-radius:2px;background:rgba(255,255,255,.06);overflow:hidden}
+.sf-fill{height:100%;background:var(--grad90);width:0;transition:width .45s ease}
+
+/* STEPS */
+.step{display:none}
+.step.active{display:block;animation:slideIn .3s ease forwards}
+@keyframes slideIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+.step-title{font-size:1.25rem;font-weight:900;color:#fff;margin:0 0 5px}
+.step-sub{font-size:.82rem;color:var(--text2);margin-bottom:20px}
+
+/* OPTION CARDS */
+.opt-grid{display:grid;gap:10px}
+.cols2{grid-template-columns:1fr 1fr}
+.cols3{grid-template-columns:1fr 1fr 1fr}
+.opt{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);border-radius:var(--r);padding:18px 12px;cursor:pointer;text-align:center;transition:all .22s;user-select:none;-webkit-tap-highlight-color:transparent}
+.opt:hover:not(.sel){border-color:rgba(255,255,255,.2);transform:translateY(-2px)}
+.opt.sel{border-color:var(--accent);background:rgba(255,107,53,.1);box-shadow:0 0 0 4px rgba(255,107,53,.12),0 0 20px rgba(255,107,53,.15);transform:translateY(-2px)}
+.opt-icon{font-size:2rem;display:block;margin-bottom:8px;transition:transform .22s}
+.opt.sel .opt-icon{transform:scale(1.2)}
+.opt-lbl{font-size:.86rem;font-weight:800;color:#fff}
+.opt-desc{font-size:.68rem;color:var(--text2);margin-top:4px;line-height:1.4}
+.opt-row{text-align:right;display:flex;gap:14px;align-items:center;padding:16px 18px !important;text-align:unset}
+.opt-row .opt-icon{margin:0;font-size:1.75rem;flex-shrink:0}
+.opt-row-info{flex:1}
+
+/* INPUTS */
+.field{margin-bottom:16px}
+.field-lbl{font-size:.82rem;font-weight:700;color:var(--text2);margin-bottom:7px;display:flex;justify-content:space-between;align-items:center}
+.field-val{font-size:.95rem;font-weight:900;color:#fff}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.inp{background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.08);border-radius:var(--r-sm);color:#fff;font-size:1rem;padding:13px 15px;width:100%;outline:none;font-family:inherit;transition:border-color .2s;-webkit-appearance:none}
+.inp:focus{border-color:var(--accent);background:rgba(255,107,53,.05)}
+.inp::placeholder{color:var(--text3)}
+input[type=range]{-webkit-appearance:none;width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.08);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--grad);box-shadow:0 0 0 3px rgba(255,107,53,.2),0 2px 8px rgba(255,107,53,.4);cursor:pointer}
+.range-labels{display:flex;justify-content:space-between;font-size:.6rem;color:var(--text3);margin-top:5px}
+
+/* NAV */
+.nav{display:flex;gap:12px;margin-top:22px}
+.btn-back{flex:0 0 52px;height:52px;border-radius:var(--r-sm);border:1.5px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text2);font-size:1.1rem;cursor:pointer;transition:all .2s}
+.btn-back:hover{border-color:var(--accent);color:var(--accent)}
+.btn-next{flex:1;height:52px;border-radius:var(--r-sm);border:none;background:var(--grad);color:#fff;font-size:1rem;font-weight:900;cursor:pointer;transition:all .25s;box-shadow:0 4px 20px rgba(255,107,53,.3);letter-spacing:.3px}
+.btn-next:hover:not(:disabled){box-shadow:0 6px 32px rgba(255,107,53,.55);transform:translateY(-2px)}
+.btn-next:disabled{opacity:.28;cursor:not-allowed;box-shadow:none;transform:none}
+
+/* ── RESULT ── */
+#result{display:none}
+#result.vis{display:block}
+
+.res-banner{text-align:center;padding:48px 20px 28px;background:radial-gradient(ellipse 520px 260px at 50% 0%,rgba(255,107,53,.14),transparent 70%)}
+.res-logo{font-size:1.4rem;font-weight:900;letter-spacing:8px;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.res-name{font-size:.9rem;color:var(--text2);margin-top:8px}
+.res-title{font-size:1.9rem;font-weight:900;color:#fff;margin:10px 0 5px;line-height:1.15}
+.res-badge{display:inline-block;padding:4px 14px;border-radius:99px;border:1px solid rgba(255,107,53,.4);color:var(--accent);font-size:.7rem;font-weight:800;margin-top:8px;background:rgba(255,107,53,.08)}
+
+/* STAT BAR */
+.stat-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.06);border-radius:var(--r);overflow:hidden;margin-bottom:20px;border:1.5px solid rgba(255,255,255,.07)}
+.stat-item{background:rgba(12,13,22,1);padding:18px 8px;text-align:center}
+.stat-num{font-size:1.65rem;font-weight:900;line-height:1;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.stat-lbl{font-size:.58rem;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.stat-unit{font-size:.62rem;color:var(--text3)}
+
+/* MACRO VISUAL */
+.macro-visual{display:flex;gap:18px;align-items:center;margin:18px 0;padding:18px;background:rgba(255,255,255,.04);border-radius:var(--r);border:1.5px solid rgba(255,255,255,.07)}
+.macro-legend{flex:1}
+.leg-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:.82rem}
+.leg-row:last-child{margin-bottom:0}
+.leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.leg-name{color:var(--text2);flex:1}
+.leg-val{color:#fff;font-weight:800;font-size:.85rem}
+.leg-pct{color:var(--text3);font-size:.72rem;margin-right:4px}
+
+/* INFO GRID */
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,.06);border-radius:var(--r);overflow:hidden;margin-bottom:20px;border:1.5px solid rgba(255,255,255,.07)}
+.info-item{background:rgba(12,13,22,1);padding:16px 18px}
+.info-key{font-size:.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.info-val{font-size:1.25rem;font-weight:900;color:#fff;line-height:1}
+.info-val.accent{color:var(--accent)}
+.info-sub{font-size:.68rem;color:var(--text3);margin-top:3px}
+
+/* SECTION TITLE */
+.sec{font-size:.85rem;font-weight:900;color:#fff;margin:24px 0 12px;display:flex;align-items:center;gap:10px}
+.sec::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(255,255,255,.1),transparent)}
+
+/* MEAL CARDS */
+.meal-card{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);border-radius:var(--r);margin-bottom:10px;overflow:hidden;animation:cardIn .4s ease both}
+@keyframes cardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.meal-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none;border-bottom:1px solid rgba(255,255,255,.05);transition:background .15s;-webkit-tap-highlight-color:transparent}
+.meal-head:hover{background:rgba(255,255,255,.03)}
+.meal-emo{font-size:1.45rem;flex-shrink:0}
+.meal-info{flex:1;min-width:0}
+.meal-name{font-weight:800;color:#fff;font-size:.9rem}
+.meal-meta{font-size:.66rem;color:var(--text2);margin-top:2px}
+.meal-cal{font-size:.76rem;font-weight:800;color:var(--accent);flex-shrink:0}
+.chev{color:var(--text3);font-size:.7rem;transition:transform .3s;flex-shrink:0;margin-right:4px}
+.meal-card.open .chev{transform:rotate(180deg)}
+.meal-body{max-height:0;overflow:hidden;transition:max-height .4s cubic-bezier(.4,0,.2,1)}
+.meal-card.open .meal-body{max-height:800px}
+.food-row{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.03);gap:8px}
+.food-row:last-child{border-bottom:none}
+.food-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:.5;flex-shrink:0}
+.food-name{font-size:.82rem;color:var(--text);flex:1}
+.food-amount{font-size:.72rem;color:var(--text2);flex-shrink:0}
+.food-prot{font-size:.7rem;color:var(--green);flex-shrink:0;min-width:32px;text-align:left}
+
+/* TIPS */
+.tip-card{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);border-radius:var(--r);overflow:hidden;margin-bottom:22px}
+.tip-head{padding:13px 18px;background:rgba(255,255,255,.03);font-weight:900;color:#fff;font-size:.86rem;border-bottom:1px solid rgba(255,255,255,.06)}
+.tip-row{display:flex;gap:12px;padding:11px 18px;border-bottom:1px solid rgba(255,255,255,.03)}
+.tip-row:last-child{border-bottom:none}
+.tip-key{font-size:.68rem;font-weight:900;color:var(--accent);flex-shrink:0;width:80px;padding-top:2px}
+.tip-val{font-size:.79rem;color:var(--text2);line-height:1.55}
+
+/* BODY FAT BADGE */
+.bf-row{display:flex;align-items:center;gap:14px;padding:14px 18px;background:rgba(255,255,255,.04);border-radius:var(--r);border:1.5px solid rgba(255,255,255,.07);margin-bottom:20px}
+.bf-icon{font-size:2rem;flex-shrink:0}
+.bf-label{font-size:.72rem;color:var(--text2)}
+.bf-val{font-size:1.15rem;font-weight:900;color:#fff}
+.bf-cat{display:inline-block;padding:3px 10px;border-radius:99px;font-size:.66rem;font-weight:800;margin-top:4px}
+
+/* ACTIONS */
+.actions{display:flex;gap:12px;margin-bottom:36px}
+.btn-action{flex:1;height:52px;border-radius:var(--r-sm);border:1.5px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text2);font-size:.88rem;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-action:hover{border-color:var(--accent);color:var(--accent)}
+.btn-wa{background:rgba(37,211,102,.12);border-color:rgba(37,211,102,.3);color:#25d366}
+.btn-wa:hover{background:rgba(37,211,102,.2);border-color:#25d366;color:#25d366}
+.btn-primary{background:var(--grad);border:none;color:#fff;box-shadow:0 4px 20px rgba(255,107,53,.3)}
+.btn-primary:hover{box-shadow:0 6px 32px rgba(255,107,53,.5);transform:translateY(-1px);color:#fff;border-color:transparent}
+.watermark{text-align:center;font-size:.68rem;color:var(--text3);padding:18px 0 0;letter-spacing:.8px}
+
+@media(max-width:420px){
+  .stat-bar{grid-template-columns:repeat(2,1fr)}
+  .stat-num{font-size:1.4rem}
+  .actions{flex-wrap:wrap}
+  .btn-action{flex:1 1 calc(50% - 6px)}
+  .btn-primary{flex:1 1 100%}
+}
+@media print{
+  .orb,.step-track,.hero,.actions,.watermark,#wizard{display:none!important}
+  #result{display:block!important}
+  body{background:#fff;color:#000;font-size:14px}
+  .stat-bar,.info-grid,.meal-card,.tip-card,.bf-row,.macro-visual{border:1px solid #ddd!important;background:#f8f8f8!important}
+  .meal-body{max-height:unset!important}
+  .stat-num,.res-title,.info-val,.meal-name{-webkit-text-fill-color:#000!important;background:none!important;color:#000!important}
+  .stat-lbl,.stat-unit,.info-key,.info-sub,.meal-meta,.food-name,.food-amount,.tip-val,.leg-name,.tip-key{color:#444!important}
+  .res-banner{background:none!important;padding:20px 0!important}
+  .res-logo,.res-badge{display:none!important}
+}
+</style>
+</head>
+<body>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="orb orb3"></div>
+
+<!-- ══════════ WIZARD ══════════ -->
+<div id="wizard">
+<div class="wrap">
+
+  <div class="hero">
+    <a class="hero-back" href="index.html">← חזרה לבחירה</a>
+    <div class="hero-tag">♂ גברים בלבד</div>
+    <div class="logo">AVIEL</div>
+    <div class="hero-title">מחשבון TDEE + תפריט גברי</div>
+    <div class="hero-sub">חלבון נכון · גירעון חכם · אוכל אמיתי</div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="step-track">
+    <div class="sc active" id="sc0">1<span class="sc-lbl">פרטים</span></div>
+    <div class="sf"><div class="sf-fill" id="sf0"></div></div>
+    <div class="sc" id="sc1">2<span class="sc-lbl">גוף</span></div>
+    <div class="sf"><div class="sf-fill" id="sf1"></div></div>
+    <div class="sc" id="sc2">3<span class="sc-lbl">פעילות</span></div>
+    <div class="sf"><div class="sf-fill" id="sf2"></div></div>
+    <div class="sc" id="sc3">4<span class="sc-lbl">מטרה</span></div>
+  </div>
+
+  <!-- ── STEP 0: Name + Phone ── -->
+  <div class="step active" id="step0">
+    <div class="step-title">קצת עלייך</div>
+    <div class="step-sub">נשתמש בזה כדי לבנות את התפריט ולשלוח אותו אליך</div>
+    <div class="field">
+      <div class="field-lbl">שם פרטי</div>
+      <input class="inp" id="inp_name" type="text" placeholder="השם שלך" oninput="chk(0)" autocomplete="given-name">
+    </div>
+    <div class="field">
+      <div class="field-lbl">מספר טלפון</div>
+      <input class="inp" id="inp_phone" type="tel" placeholder="05X-XXXXXXX" oninput="chk(0)" autocomplete="tel">
+    </div>
+    <div class="nav">
+      <button class="btn-next" id="nxt0" onclick="go(1)" disabled>המשך ←</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 1: Body stats ── -->
+  <div class="step" id="step1">
+    <div class="step-title">נתוני גוף</div>
+    <div class="step-sub">ככל שמדויק יותר — התפריט מדויק יותר</div>
+    <div class="row2">
+      <div class="field">
+        <div class="field-lbl">גיל</div>
+        <input class="inp" id="inp_age" type="number" placeholder="28" min="15" max="80" oninput="chk(1)" inputmode="numeric">
+      </div>
+      <div class="field">
+        <div class="field-lbl">גובה (ס"מ)</div>
+        <input class="inp" id="inp_height" type="number" placeholder="178" min="150" max="220" oninput="chk(1)" inputmode="numeric">
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-lbl">משקל (ק"ג)</div>
+      <input class="inp" id="inp_weight" type="number" placeholder="82" min="40" max="200" oninput="chk(1)" inputmode="decimal">
+    </div>
+    <div class="field">
+      <div class="field-lbl">אחוז שומן <span style="color:var(--text3);font-size:.7rem">(אופציונלי — משפר דיוק)</span><span id="fatLblM" class="field-val">—</span></div>
+      <input type="range" id="sl_fat" min="0" max="40" value="0" step="1" oninput="onFat(this.value,'fatLblM')">
+      <div class="range-labels"><span>לא יודע</span><span>8%</span><span>15%</span><span>22%</span><span>30%</span><span>40%</span></div>
+    </div>
+    <div class="nav">
+      <button class="btn-back" onclick="go(0)">←</button>
+      <button class="btn-next" id="nxt1" onclick="go(2)" disabled>המשך ←</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 2: Activity ── -->
+  <div class="step" id="step2">
+    <div class="step-title">כמה אתה פעיל ?</div>
+    <div class="step-sub">ממוצע שבועי — ביום אימון וביום מנוחה גם יחד</div>
+    <div class="opt-grid">
+      <div class="opt opt-row" data-key="act" data-val="1.2" onclick="pick(this)">
+        <span class="opt-icon">🛋️</span>
+        <div class="opt-row-info"><div class="opt-lbl">יושבני</div><div class="opt-desc">עבודת משרד, כמעט אין פעילות</div></div>
+      </div>
+      <div class="opt opt-row" data-key="act" data-val="1.375" onclick="pick(this)">
+        <span class="opt-icon">🚶</span>
+        <div class="opt-row-info"><div class="opt-lbl">פעילות קלה</div><div class="opt-desc">1–3 אימונים בשבוע</div></div>
+      </div>
+      <div class="opt opt-row" data-key="act" data-val="1.55" onclick="pick(this)">
+        <span class="opt-icon">🏋️</span>
+        <div class="opt-row-info"><div class="opt-lbl">פעיל מתון</div><div class="opt-desc">3–5 אימונים בשבוע</div></div>
+      </div>
+      <div class="opt opt-row" data-key="act" data-val="1.725" onclick="pick(this)">
+        <span class="opt-icon">⚡</span>
+        <div class="opt-row-info"><div class="opt-lbl">פעיל מאוד</div><div class="opt-desc">6–7 אימונים + עבודה פיזית</div></div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn-back" onclick="go(1)">←</button>
+      <button class="btn-next" id="nxt2" onclick="go(3)" disabled>המשך ←</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 3: Goal + Meals ── -->
+  <div class="step" id="step3">
+    <div class="step-title">מה המטרה ?</div>
+    <div class="step-sub">על בסיס זה נחשב את היעד הקלורי שלך</div>
+    <div class="opt-grid cols3" style="margin-bottom:22px">
+      <div class="opt" data-key="goal" data-val="cut" onclick="pick(this)">
+        <span class="opt-icon">🔥</span>
+        <div class="opt-lbl">חיטוב</div>
+        <div class="opt-desc">גירעון 500 קל׳</div>
+      </div>
+      <div class="opt" data-key="goal" data-val="maintain" onclick="pick(this)">
+        <span class="opt-icon">⚖️</span>
+        <div class="opt-lbl">שמירה</div>
+        <div class="opt-desc">TDEE מלא</div>
+      </div>
+      <div class="opt" data-key="goal" data-val="bulk" onclick="pick(this)">
+        <span class="opt-icon">💪</span>
+        <div class="opt-lbl">מסה</div>
+        <div class="opt-desc">עודף 300 קל׳</div>
+      </div>
+    </div>
+    <div class="step-title" style="font-size:.95rem;margin-bottom:10px">כמה ארוחות ביום ?</div>
+    <div class="opt-grid cols3">
+      <div class="opt" data-key="meals" data-val="3" onclick="pick(this)">
+        <span style="font-size:1.8rem;font-weight:900;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:block;margin-bottom:4px">3</span>
+        <div class="opt-desc">ארוחות</div>
+      </div>
+      <div class="opt" data-key="meals" data-val="4" onclick="pick(this)">
+        <span style="font-size:1.8rem;font-weight:900;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:block;margin-bottom:4px">4</span>
+        <div class="opt-desc">ארוחות</div>
+      </div>
+      <div class="opt" data-key="meals" data-val="5" onclick="pick(this)">
+        <span style="font-size:1.8rem;font-weight:900;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:block;margin-bottom:4px">5</span>
+        <div class="opt-desc">ארוחות</div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn-back" onclick="go(2)">←</button>
+      <button class="btn-next" id="nxt3" onclick="buildResult()" disabled>🚀 בנה תפריט</button>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+</div><!-- /wizard -->
+
+<!-- ══════════ RESULT ══════════ -->
+<div id="result">
+<div class="wrap">
+
+  <div class="res-banner">
+    <div class="res-logo">AVIEL</div>
+    <div class="res-name" id="resName"></div>
+    <div class="res-title" id="resTitle">התפריט שלך מוכן 💪</div>
+    <div class="res-badge" id="resBadge"></div>
+  </div>
+
+  <!-- Macro stat bar -->
+  <div class="stat-bar">
+    <div class="stat-item"><div class="stat-num" id="sCal">0</div><div class="stat-lbl">קלוריות</div><div class="stat-unit">ביום</div></div>
+    <div class="stat-item"><div class="stat-num" id="sProt">0</div><div class="stat-lbl">חלבון</div><div class="stat-unit">גרם</div></div>
+    <div class="stat-item"><div class="stat-num" id="sCarb">0</div><div class="stat-lbl">פחמימות</div><div class="stat-unit">גרם</div></div>
+    <div class="stat-item"><div class="stat-num" id="sFat">0</div><div class="stat-lbl">שומן</div><div class="stat-unit">גרם</div></div>
+  </div>
+
+  <!-- Macro donut + legend -->
+  <div class="macro-visual">
+    <div style="flex-shrink:0">
+      <svg width="88" height="88" viewBox="0 0 88 88">
+        <circle cx="44" cy="44" r="34" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="11"/>
+        <circle id="dP" cx="44" cy="44" r="34" fill="none" stroke="#4ade80" stroke-width="11"
+          stroke-dasharray="0 213.6" transform="rotate(-90 44 44)" style="transition:stroke-dasharray .8s ease"/>
+        <circle id="dC" cx="44" cy="44" r="34" fill="none" stroke="#60a5fa" stroke-width="11"
+          stroke-dasharray="0 213.6" transform="rotate(-90 44 44)" style="transition:stroke-dasharray .8s ease .1s"/>
+        <circle id="dF" cx="44" cy="44" r="34" fill="none" stroke="#ffc107" stroke-width="11"
+          stroke-dasharray="0 213.6" transform="rotate(-90 44 44)" style="transition:stroke-dasharray .8s ease .2s"/>
+      </svg>
+    </div>
+    <div class="macro-legend">
+      <div class="leg-row">
+        <div class="leg-dot" style="background:#4ade80"></div>
+        <span class="leg-name">חלבון</span>
+        <span class="leg-pct" id="lgPpct"></span>
+        <span class="leg-val" id="lgP">—</span>
+      </div>
+      <div class="leg-row">
+        <div class="leg-dot" style="background:#60a5fa"></div>
+        <span class="leg-name">פחמימות</span>
+        <span class="leg-pct" id="lgCpct"></span>
+        <span class="leg-val" id="lgC">—</span>
+      </div>
+      <div class="leg-row">
+        <div class="leg-dot" style="background:#ffc107"></div>
+        <span class="leg-name">שומן</span>
+        <span class="leg-pct" id="lgFpct"></span>
+        <span class="leg-val" id="lgF">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Numbers grid -->
+  <div class="info-grid">
+    <div class="info-item"><div class="info-key">BMR</div><div class="info-val" id="iBMR">—</div><div class="info-sub">שריפה במנוחה מוחלטת</div></div>
+    <div class="info-item"><div class="info-key">TDEE</div><div class="info-val" id="iTDEE">—</div><div class="info-sub">שריפה יומית כוללת</div></div>
+    <div class="info-item"><div class="info-key">יעד קלורי</div><div class="info-val accent" id="iTarget">—</div><div class="info-sub" id="iGoalDesc">—</div></div>
+    <div class="info-item"><div class="info-key">LBM</div><div class="info-val" id="iLBM">—</div><div class="info-sub">מסת גוף רזה (ק"ג)</div></div>
+  </div>
+
+  <!-- BF category if known -->
+  <div id="bfSection" style="display:none">
+    <div class="bf-row">
+      <div class="bf-icon" id="bfIcon">💪</div>
+      <div>
+        <div class="bf-label">אחוז שומן גוף</div>
+        <div class="bf-val" id="bfVal">—</div>
+        <span class="bf-cat" id="bfCat"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">📅 תפריט יומי</div>
+  <div id="mealCards"></div>
+
+  <div class="sec">💡 הנחיות חשובות</div>
+  <div class="tip-card" id="tipsCard"></div>
+
+  <div class="actions">
+    <button class="btn-action btn-wa" id="waBtn" onclick="shareWA()">📲 שלח בווטסאפ</button>
+    <button class="btn-action" onclick="window.print()">🖨️ הדפסה</button>
+    <button class="btn-action btn-primary" onclick="restart()">🔄 חשב מחדש</button>
+  </div>
+
+  <div class="watermark">נבנה על ידי אביאל עמירה · WNBF Pro Coach</div>
+</div>
+</div><!-- /result -->
+
+<script>
+// ── STATE ──────────────────────────────────────────────
+const S={name:'',phone:'',age:0,height:0,weight:0,fat:0,act:null,goal:null,meals:4};
+const R={bmr:0,tdee:0,target:0,lbm:0,prot:0,carb:0,fat:0};
+let curStep=0;
+
+// ── FOOD DB (per 100g: [name, kcal, prot, carb, fat]) ──
+const PROT=[
+  ['חזה עוף מבושל',         165, 31.0,  0.0,  3.6],
+  ['פילה הודו מבושל',       113, 24.0,  0.0,  1.3],
+  ['סלמון אפוי',            208, 20.0,  0.0, 13.0],
+  ['טונה בשימורים (מים)',    86, 19.0,  0.0,  0.6],
+  ['דג בורי אפוי',          124, 20.5,  0.0,  4.5],
+  ['עוף טחון מבושל',        152, 28.0,  0.0,  3.8],
+  ['קוטג׳ 3%',               92, 11.0,  3.5,  3.0],
+  ['גבינה לבנה 5%',          90,  9.5,  2.5,  5.0],
+  ['ביצים שלמות',           155, 13.0,  1.1, 11.0],
+  ['שייק חלבון (וויי)',     380, 76.0,  6.0,  5.0],
+];
+const CARB=[
+  ['אורז לבן מבושל',        130,  2.7, 28.0,  0.3],
+  ['אורז מלא מבושל',        112,  2.3, 24.0,  0.9],
+  ['בטטה אפויה',             86,  1.6, 20.0,  0.1],
+  ['קינואה מבושלת',         120,  4.4, 21.5,  1.9],
+  ['פסטה מלאה מבושלת',      131,  5.0, 25.5,  1.1],
+  ['לחם מלא',               247,  8.0, 45.0,  3.4],
+  ['שיבולת שועל (יבשה)',    370, 13.0, 62.0,  7.0],
+  ['כוסמת מבושלת',           92,  3.4, 20.0,  0.6],
+  ['תפוח אדמה מבושל',        77,  2.0, 17.0,  0.1],
+  ['קוסקוס מבושל',           112,  3.8, 23.0,  0.2],
+];
+const VEG=[
+  ['סלט ירוק + עגבנייה',    18,  1.2,  3.5,  0.2],
+  ['ברוקולי מאודה',          34,  2.8,  6.6,  0.4],
+  ['כרובית מאודה',           25,  1.9,  5.0,  0.3],
+  ['תרד מבושל',              23,  2.9,  3.6,  0.4],
+  ['גמבה חצויה',             31,  1.0,  7.2,  0.3],
+  ['קישואים מאודים',         17,  1.2,  3.1,  0.3],
+  ['כרוב קצוץ',              25,  1.3,  5.8,  0.1],
+  ['מלפפון פרוס',            15,  0.7,  3.6,  0.1],
+];
+const FAT=[
+  ['אבוקדו',               160,  2.0,  8.5, 14.7],
+  ['שקדים',                579, 21.0, 22.0, 49.0],
+  ['שמן זית',              884,  0.0,  0.0,100.0],
+  ['טחינה גולמית',         597, 17.0, 21.0, 53.0],
+  ['אגוזי מלך',            654, 15.0, 14.0, 65.0],
+];
+
+// meal templates [name, emo, prot_frac, carb_frac, fat_frac, cal_frac]
+const TEMPLATES={
+  3:[
+    {n:'ארוחת בוקר',     e:'🌅', p:.30, c:.30, f:.25},
+    {n:'ארוחת צהריים',   e:'☀️',  p:.40, c:.40, f:.40},
+    {n:'ארוחת ערב',      e:'🌙', p:.30, c:.30, f:.35},
+  ],
+  4:[
+    {n:'בוקר',           e:'🌅', p:.25, c:.25, f:.20},
+    {n:'לפני/אחרי אימון',e:'💪', p:.25, c:.30, f:.10},
+    {n:'צהריים',         e:'☀️',  p:.30, c:.30, f:.35},
+    {n:'ערב',            e:'🌙', p:.20, c:.15, f:.35},
+  ],
+  5:[
+    {n:'בוקר',           e:'🌅', p:.20, c:.20, f:.15},
+    {n:'לפני אימון',     e:'⚡', p:.20, c:.25, f:.10},
+    {n:'צהריים',         e:'☀️',  p:.30, c:.30, f:.30},
+    {n:'אחה"צ',          e:'🍎', p:.15, c:.15, f:.15},
+    {n:'ערב',            e:'🌙', p:.15, c:.10, f:.30},
+  ],
+};
+
+// ── UI HELPERS ──────────────────────────────────────────
+function pick(el){
+  const k=el.dataset.key;
+  document.querySelectorAll('[data-key="'+k+'"]').forEach(x=>x.classList.remove('sel'));
+  el.classList.add('sel');
+  S[k]=el.dataset.val;
+  chk(curStep);
+}
+
+function chk(n){
+  const btns=[null,'nxt1','nxt2','nxt3'];
+  if(n===0){
+    const ok=!!(document.getElementById('inp_name').value.trim()&&document.getElementById('inp_phone').value.trim().length>=9);
+    document.getElementById('nxt0').disabled=!ok;
+  } else if(n===1){
+    const a=+document.getElementById('inp_age').value,h=+document.getElementById('inp_height').value,w=+document.getElementById('inp_weight').value;
+    document.getElementById('nxt1').disabled=!(a>=15&&a<=80&&h>=150&&h<=220&&w>=40&&w<=200);
+  } else if(n===2){
+    document.getElementById('nxt2').disabled=!S.act;
+  } else if(n===3){
+    document.getElementById('nxt3').disabled=!(S.goal&&S.meals);
+  }
+}
+
+function onFat(v,lblId){
+  S.fat=+v===0?0:+v;
+  document.getElementById(lblId).textContent=+v===0?'לא יודע':v+'%';
+}
+
+function go(n){
+  if(curStep===0){S.name=document.getElementById('inp_name').value.trim();S.phone=document.getElementById('inp_phone').value.trim();}
+  if(curStep===1){S.age=+document.getElementById('inp_age').value;S.height=+document.getElementById('inp_height').value;S.weight=+document.getElementById('inp_weight').value;}
+  const cur=document.getElementById('step'+curStep);cur.classList.remove('active');
+  curStep=n;
+  const nxt=document.getElementById('step'+curStep);nxt.style.animation='none';void nxt.offsetWidth;nxt.style.animation='';nxt.classList.add('active');
+  updateProg();window.scrollTo({top:0,behavior:'smooth'});chk(curStep);
+}
+
+function updateProg(){
+  for(let i=0;i<4;i++){
+    const c=document.getElementById('sc'+i);c.classList.remove('active','done');
+    if(i<curStep)c.classList.add('done'); else if(i===curStep)c.classList.add('active');
+    if(i<3)document.getElementById('sf'+i).style.width=(i<curStep?'100%':'0%');
+  }
+}
+
+function countUp(el,target,ms){
+  const start=performance.now();
+  (function frame(now){
+    const p=Math.min((now-start)/ms,1);
+    el.textContent=Math.round(p*target);
+    if(p<1)requestAnimationFrame(frame);
+  })(start);
+}
+
+// ── CALC ────────────────────────────────────────────────
+function buildResult(){
+  S.name=document.getElementById('inp_name').value.trim()||'חבר';
+  S.phone=document.getElementById('inp_phone').value.trim();
+  S.age=+document.getElementById('inp_age').value;
+  S.height=+document.getElementById('inp_height').value;
+  S.weight=+document.getElementById('inp_weight').value;
+  S.meals=+(S.meals)||4;
+
+  // BMR Mifflin-St Jeor — Men
+  R.bmr=Math.round(10*S.weight + 6.25*S.height - 5*S.age + 5);
+  R.tdee=Math.round(R.bmr * +S.act);
+
+  const deltas={cut:-500, maintain:0, bulk:300};
+  R.target=Math.max(1600, R.tdee+(deltas[S.goal]||0));
+
+  // LBM
+  const fatPct=S.fat>0 ? S.fat : estimateBF(S.age,'m');
+  R.lbm=Math.round(S.weight*(1-fatPct/100));
+
+  // Macros
+  R.prot=Math.round(R.lbm * 2.2);                 // LBM × 2.2g
+  R.fat=Math.round(S.weight * 0.9);                // ~0.9g/kg
+  R.carb=Math.round(Math.max(0, R.target - R.prot*4 - R.fat*9) / 4);
+
+  // Recalc actual target from macros (rounding fixes)
+  R.target=R.prot*4 + R.carb*4 + R.fat*9;
+
+  renderResult(fatPct);
+
+  // שליחת ליד ל-CRM
+  fetch('https://aviel-crm-production.up.railway.app/api/leads', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: S.name, phone: S.phone,
+      age: S.age, height: S.height, weight: S.weight,
+      goal: [S.goal === 'cut' ? 'tone' : S.goal === 'bulk' ? 'muscle' : 'health'],
+      funnel: 'meal-planner',
+      notes: 'TDEE: ' + R.tdee + ' | יעד: ' + R.target + ' קל׳ | ' + R.prot + 'g חלבון'
+    })
+  }).catch(function(){});
+}
+
+function estimateBF(age, gender){
+  // simple average estimate when user doesn't know
+  return gender==='m' ? Math.min(25, 14 + age*0.1) : Math.min(32, 22 + age*0.08);
+}
+
+// ── RENDER ──────────────────────────────────────────────
+function renderResult(fatPct){
+  document.getElementById('wizard').style.display='none';
+  document.getElementById('result').classList.add('vis');
+  window.scrollTo({top:0,behavior:'smooth'});
+
+  const goalLabels={cut:'חיטוב −500 קל׳', maintain:'שמירה — TDEE', bulk:'מסה +300 קל׳'};
+  document.getElementById('resName').textContent='התפריט של '+S.name;
+  document.getElementById('resBadge').textContent='♂ גבר · '+goalLabels[S.goal]+' · '+S.meals+' ארוחות';
+
+  // count-up numbers
+  setTimeout(()=>{
+    countUp(document.getElementById('sCal'), R.target, 750);
+    countUp(document.getElementById('sProt'), R.prot, 650);
+    countUp(document.getElementById('sCarb'), R.carb, 700);
+    countUp(document.getElementById('sFat'), R.fat, 650);
+  },150);
+
+  document.getElementById('iBMR').textContent  = R.bmr+' קל׳';
+  document.getElementById('iTDEE').textContent = R.tdee+' קל׳';
+  document.getElementById('iTarget').textContent = R.target+' קל׳';
+  document.getElementById('iGoalDesc').textContent = goalLabels[S.goal];
+  document.getElementById('iLBM').textContent  = R.lbm+' ק"ג';
+
+  // Donut
+  const pPct=Math.round(R.prot*4/R.target*100);
+  const cPct=Math.round(R.carb*4/R.target*100);
+  const fPct=100-pPct-cPct;
+  const circ=213.6;
+  document.getElementById('lgP').textContent=R.prot+'ג';  document.getElementById('lgPpct').textContent=pPct+'%';
+  document.getElementById('lgC').textContent=R.carb+'ג'; document.getElementById('lgCpct').textContent=cPct+'%';
+  document.getElementById('lgF').textContent=R.fat+'ג';  document.getElementById('lgFpct').textContent=fPct+'%';
+  setTimeout(()=>{
+    const pA=circ*pPct/100, cA=circ*cPct/100, fA=circ*fPct/100;
+    const dp=document.getElementById('dP'),dc=document.getElementById('dC'),df=document.getElementById('dF');
+    dp.setAttribute('stroke-dasharray', pA+' '+(circ-pA));
+    dc.setAttribute('stroke-dasharray', cA+' '+(circ-cA));
+    dc.setAttribute('stroke-dashoffset', -(circ-pA));
+    df.setAttribute('stroke-dasharray', fA+' '+(circ-fA));
+    df.setAttribute('stroke-dashoffset', -(circ-pA-cA));
+  },350);
+
+  // BF section
+  if(S.fat>0){
+    document.getElementById('bfSection').style.display='block';
+    document.getElementById('bfVal').textContent=S.fat+'%';
+    const cats=[
+      [6,'ספורטאי','#4ade80','💪'],
+      [14,'כושר גבוה','#60a5fa','🏆'],
+      [18,'כושר ממוצע','#ffc107','✅'],
+      [25,'מעל הממוצע','#ff9f43','📊'],
+      [100,'גבוה','#ff6b6b','⚠️'],
+    ];
+    const cat=cats.find(c=>S.fat<=c[0]);
+    document.getElementById('bfCat').textContent=cat[1];
+    document.getElementById('bfCat').style.cssText=`background:${cat[2]}22;color:${cat[2]};border:1px solid ${cat[2]}55`;
+    document.getElementById('bfIcon').textContent=cat[3];
+  }
+
+  buildMeals();
+  buildTips();
+}
+
+// ── MEALS ───────────────────────────────────────────────
+function buildMeals(){
+  const templates=TEMPLATES[S.meals]||TEMPLATES[4];
+  const wrap=document.getElementById('mealCards');
+  wrap.innerHTML='';
+  const usedP=new Set(), usedC=new Set(), usedV=new Set(), usedF=new Set();
+
+  templates.forEach((t,i)=>{
+    const mProt=Math.round(R.prot * t.p);
+    const mCarb=Math.round(R.carb * t.c);
+    const mFat =Math.round(R.fat  * t.f);
+    const mCal =mProt*4 + mCarb*4 + mFat*9;
+
+    const foods=pickMealFoods(i, mProt, mCarb, mFat, usedP, usedC, usedV, usedF);
+
+    const card=document.createElement('div');
+    card.className='meal-card'+(i===0?' open':'');
+    card.style.animationDelay=(i*70)+'ms';
+
+    const rows=foods.map(f=>
+      `<div class="food-row">
+        <div class="food-dot"></div>
+        <span class="food-name">${f.name}</span>
+        <span class="food-amount">${f.amount}</span>
+        <span class="food-prot">${f.prot}ג חלבון</span>
+      </div>`
+    ).join('');
+
+    card.innerHTML=`
+      <div class="meal-head" onclick="toggleMeal(this.parentElement)">
+        <div class="meal-emo">${t.e}</div>
+        <div class="meal-info">
+          <div class="meal-name">${t.n}</div>
+          <div class="meal-meta">~${mCal} קל׳ · חלבון ${mProt}ג · פחמימות ${mCarb}ג · שומן ${mFat}ג</div>
+        </div>
+        <div class="meal-cal">~${mCal}</div>
+        <div class="chev">▼</div>
+      </div>
+      <div class="meal-body">${rows}</div>`;
+    wrap.appendChild(card);
+  });
+}
+
+function pickMealFoods(idx, mP, mC, mF, usedP, usedC, usedV, usedF){
+  const foods=[];
+
+  // Protein source
+  const avP=PROT.filter(f=>!usedP.has(f[0]));
+  const ps=avP.length ? avP[idx % avP.length] : PROT[idx % PROT.length];
+  usedP.add(ps[0]);
+  const pGrams=clamp(Math.round(mP / (ps[2]/100)), 50, 350);
+  const pActual=Math.round(pGrams * ps[2] / 100);
+  if(pGrams>25) foods.push({name:ps[0], amount:pGrams+'ג', prot:pActual});
+
+  // Carb source (if meal has carbs)
+  if(mC>20){
+    const avC=CARB.filter(f=>!usedC.has(f[0]));
+    const cs=avC.length ? avC[idx % avC.length] : CARB[idx % CARB.length];
+    usedC.add(cs[0]);
+    const cGrams=clamp(Math.round(mC / (cs[3]/100)), 30, 350);
+    const cProt=Math.round(cGrams * cs[2] / 100);
+    if(cGrams>15) foods.push({name:cs[0], amount:cGrams+'ג', prot:cProt});
+  }
+
+  // Veggie (always)
+  const avV=VEG.filter(f=>!usedV.has(f[0]));
+  const vs=avV.length ? avV[idx % avV.length] : VEG[idx % VEG.length];
+  usedV.add(vs[0]);
+  foods.push({name:vs[0], amount:'מנה גדולה', prot:Math.round(200*vs[2]/100)});
+
+  // Fat source (if needed and space)
+  if(mF>7 && foods.length<4){
+    const avF=FAT.filter(f=>!usedF.has(f[0]));
+    if(avF.length){
+      const fs=avF[0]; usedF.add(fs[0]);
+      const fGrams=clamp(Math.round(mF / (fs[4]/100)), 5, 80);
+      const fProt=Math.round(fGrams * fs[2] / 100);
+      foods.push({name:fs[0], amount:fGrams+'ג', prot:fProt});
+    }
+  }
+
+  return foods;
+}
+
+function clamp(val,min,max){return Math.max(min,Math.min(max,val))}
+
+// ── TIPS ────────────────────────────────────────────────
+function buildTips(){
+  const tips=[];
+  const goalTip={
+    cut:`יעד ${R.target} קל׳ ביום. אם אחרי שבועיים אין ירידה — הורד 100–150 קל׳ מפחמימות, לא מחלבון.`,
+    maintain:`${R.target} קל׳ = TDEE שלך. התמקד בשיפור ביצועים באימון ובשמירת שריר.`,
+    bulk:`${R.target} קל׳ ביום. יעד ריאלי: 0.5–0.8 ק"ג לחודש. יותר מהר = שומן, לא שריר.`,
+  };
+  tips.push({k:'יעד',v:goalTip[S.goal]});
+  tips.push({k:'חלבון',v:`${R.prot}ג ביום = LBM שלך (${R.lbm} ק"ג) × 2.2. זה מה שמונע פירוק שריר ומבנה מסה חדשה.`});
+  tips.push({k:'LBM',v:`מסת גוף רזה = ${R.lbm} ק"ג. כל המאקרו מחושב לפיה, לא לפי משקל כולל — זה הדרך הנכונה.`});
+  tips.push({k:'NEAT',v:`10,000 צעדים ביום שווים עוד 400–500 קל׳ שריפה. זה כמעט ארוחה שלמה בחינם.`});
+  tips.push({k:'שקילה',v:`כל בוקר לאחר שירותים, בצום. השינוי היומי הוא רעש. בדוק ממוצע שבועי בלבד.`});
+  tips.push({k:'Refeed',v:`כל 8–10 ימים של גירעון — יום אחד של קלוריות מלאות + פחמימות גבוהות. מאפס לפטין.`});
+  tips.push({k:'שינה',v:`7–8 שעות שינה = פחות קורטיזול + יותר טסטוסטרון. פחות שינה → יותר רעב → פחות שריר.`});
+
+  const card=document.getElementById('tipsCard');
+  card.innerHTML='<div class="tip-head">💡 מה חשוב לדעת</div>'+
+    tips.map(t=>`<div class="tip-row"><div class="tip-key">${t.k}</div><div class="tip-val">${t.v}</div></div>`).join('');
+}
+
+// ── WHATSAPP ────────────────────────────────────────────
+function shareWA(){
+  const goalTxt={cut:'חיטוב',maintain:'שמירה',bulk:'מסה'};
+  const msg=`💪 *התפריט של ${S.name} — Aviel*\n\n`+
+    `🎯 מטרה: ${goalTxt[S.goal]}\n`+
+    `🔥 קלוריות: ${R.target} קל׳ ביום\n`+
+    `🥩 חלבון: ${R.prot}ג\n`+
+    `🍚 פחמימות: ${R.carb}ג\n`+
+    `🥑 שומן: ${R.fat}ג\n\n`+
+    `📊 BMR: ${R.bmr} | TDEE: ${R.tdee}\n`+
+    `💡 LBM: ${R.lbm} ק"ג\n\n`+
+    `_חושב על ידי מחשבון Aviel_`;
+  const phone=S.phone.replace(/[^0-9]/g,'').replace(/^0/,'972');
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+// ── ACCORDION ───────────────────────────────────────────
+function toggleMeal(card){
+  const wasOpen=card.classList.contains('open');
+  document.querySelectorAll('.meal-card.open').forEach(c=>c.classList.remove('open'));
+  if(!wasOpen) card.classList.add('open');
+}
+
+// ── RESTART ─────────────────────────────────────────────
+function restart(){
+  Object.assign(S,{name:'',phone:'',age:0,height:0,weight:0,fat:0,act:null,goal:null,meals:4});
+  curStep=0;
+  document.getElementById('result').classList.remove('vis');
+  document.getElementById('wizard').style.display='';
+  ['inp_name','inp_phone','inp_age','inp_height','inp_weight'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('sl_fat').value=0;
+  document.getElementById('fatLblM').textContent='—';
+  document.querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  document.getElementById('step0').classList.add('active');
+  document.getElementById('bfSection').style.display='none';
+  updateProg(); chk(0); window.scrollTo({top:0,behavior:'smooth'});
+}
+</script>
+</body>
+</html>
