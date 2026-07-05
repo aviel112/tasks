@@ -406,7 +406,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
   <div class="tip-card" id="tipsCard"></div>
 
   <div class="actions">
-    <button class="btn-action btn-wa" onclick="shareWA()">📲 שלחי בווטסאפ</button>
+    <button class="btn-action btn-wa" onclick="shareWA()">📲 שלחי לאביאל בווטסאפ</button>
     <button class="btn-action" onclick="window.print()">🖨️ הדפסה</button>
     <button class="btn-action btn-primary" onclick="restart()">🔄 חשבי מחדש</button>
   </div>
@@ -710,17 +710,14 @@ function buildTips(){
 
 function shareWA(){
   const goalTxt={cut:'חיטוב',maintain:'שמירה',tone:'עיצוב'};
-  const msg=`✨ *התפריט של ${S.name} — Aviel*\n\n`+
+  const msg=`היי אביאל! ✨ סיימתי את מחשבון התפריט ואשמח שתעיף מבט:\n\n`+
+    `👤 ${S.name} | גיל ${S.age} | ${S.height} ס"מ | ${S.weight} ק"ג\n`+
     `🎯 מטרה: ${goalTxt[S.goal]}\n`+
     `🔥 קלוריות: ${R.target} קל׳ ביום\n`+
-    `🥩 חלבון: ${R.prot}ג\n`+
-    `🍚 פחמימות: ${R.carb}ג\n`+
-    `🥑 שומן: ${R.fat}ג\n\n`+
-    `📊 BMR: ${R.bmr} | TDEE: ${R.tdee}\n`+
-    `💡 LBM: ${R.lbm} ק"ג\n\n`+
-    `_חושב על ידי מחשבון Aviel_`;
-  const phone=S.phone.replace(/[^0-9]/g,'').replace(/^0/,'972');
-  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
+    `🥩 חלבון: ${R.prot}ג | 🍚 פחמימות: ${R.carb}ג | 🥑 שומן: ${R.fat}ג\n`+
+    `📊 BMR: ${R.bmr} | TDEE: ${R.tdee} | LBM: ${R.lbm} ק"ג\n\n`+
+    `אשמח לשמוע מה אתה חושב ואיך ממשיכים מפה 🙏`;
+  window.open('https://wa.me/972529574147?text='+encodeURIComponent(msg),'_blank');
 }
 
 function toggleMeal(card){
