@@ -1046,8 +1046,8 @@ function submitGate(chosenMode){
   var phone=(document.getElementById('gatePhone').value||'').trim();
   if(!fn||!ln||!age||phone.length<9){alert('נא למלא את כל השדות');return;}
   var funnel=gateMode==='meal'?'nutrition-chef-meal':gateMode==='day'?'nutrition-chef-day':'nutrition-chef';
-  fetch('https://aviel-crm-production.up.railway.app/api/leads',{
-    method:'POST',headers:{'Content-Type':'application/json'},
+  fetch('https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec',{
+    method:'POST',mode:'no-cors', headers:{'Content-Type':'text/plain'},
     body:JSON.stringify({name:fn+' '+ln, phone:phone, age:age, funnel:funnel, goal:['health']})
   }).catch(function(){});
   document.getElementById('gateScreen').style.display='none';

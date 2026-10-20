@@ -560,9 +560,9 @@ function buildResult(){
   renderResult(fatPct);
 
   // שליחת ליד ל-CRM
-  fetch('https://aviel-crm-production.up.railway.app/api/leads', {
+  fetch('https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    mode:'no-cors', headers:{'Content-Type':'text/plain'},
     body: JSON.stringify({
       name: S.name, phone: S.phone,
       age: S.age, height: S.height, weight: S.weight,
