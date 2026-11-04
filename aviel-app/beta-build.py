@@ -272,10 +272,13 @@ function drawList(local, nat, q){
   /* 30.10.26 אביאל: קודם לפי השם (מתחיל במה שחיפשו, אחר כך מילה שלמה), ובתוך זה לפי קלוריות מהנמוך לגבוה */
   var qq=String(q||'').trim(), nsc=function(n){ n=String(n||'').trim(); return n===qq?0:n.indexOf(qq)===0?1:(' '+n+' ').indexOf(' '+qq+' ')>=0?2:3; }, srt=function(a,nm,kc){ a.sort(function(x,y){ return (nsc(nm(x))-nsc(nm(y)))||((kc(x)||0)-(kc(y)||0)); }); };
   try{ srt(ex,function(f){ return f.name; },function(f){ return +f.k100; }); local=local.slice(); srt(local,function(f){ return f[0]; },function(f){ return 4*f[2]+4*f[3]+9*f[4]; }); if(nat) srt(nat,function(r){ return shortName(r.shmmitzrach); },function(r){ return +r.food_energy; }); }catch(e){}
-  var h=ex.map(function(f,i){ return '<button type="button" data-ex="'+i+'"><span class="'+(f.ok?'mine':'tag2')+'">'+(f.ok?'אביאל':'סרוק')+'</span>'+esc(f.name)+(f.brand?' <small>'+esc(f.brand)+'</small>':'')+'<small>'+Math.round(f.k100)+' קק״ל ל-100 ג׳</small></button>'; }).join('');
-  h+=local.map(function(f){ return '<button type="button" data-loc="'+FOODS.indexOf(f)+'"><span class="mine">אביאל</span>'+esc(f[0])+'<small>'+Math.round(4*f[2]+4*f[3]+9*f[4])+' קק״ל ל-100 ג׳, מאגר אביאל</small></button>'; }).join('');
+  /* 4.11.26 (אביאל): בגבינות ומוצרי חלב — האחוז הנמוך ראשון (צהובה 5, 9, 18, 22), מכל המאגרים יחד */
+  var DAIRY=/גבינ|קוטג|לבנ|יוגורט|שמנת|מוצרלה|צהובה|בולגרית|פטה|ריקוטה|חלב/.test(qq), fp=function(n,fat){ var m=String(n||'').match(/(\d+(?:\.\d+)?)\s*%/); return m?+m[1]:(+fat||0); }, E=[];
+  var h=ex.map(function(f,i){ var t='<button type="button" data-ex="'+i+'"><span class="'+(f.ok?'mine':'tag2')+'">'+(f.ok?'אביאל':'סרוק')+'</span>'+esc(f.name)+(f.brand?' <small>'+esc(f.brand)+'</small>':'')+'<small>'+Math.round(f.k100)+' קק״ל ל-100 ג׳</small></button>'; E.push([nsc(f.name),fp(f.name,f.fat),t]); return t; }).join('');
+  h+=local.map(function(f){ var t='<button type="button" data-loc="'+FOODS.indexOf(f)+'"><span class="mine">אביאל</span>'+esc(f[0])+'<small>'+Math.round(4*f[2]+4*f[3]+9*f[4])+' קק״ל ל-100 ג׳, מאגר אביאל</small></button>'; E.push([nsc(f[0]),fp(f[0],f[4]),t]); return t; }).join('');
+  if(nat!==null) h+=nat.map(function(r,i){ var t='<button type="button" data-nat="'+i+'">'+esc(shortName(r.shmmitzrach))+'<small>'+Math.round(+r.food_energy||0)+' קק״ל ל-100 ג׳</small></button>'; E.push([nsc(shortName(r.shmmitzrach)),fp(r.shmmitzrach,r.total_fat),t]); return t; }).join('');
+  if(DAIRY&&E.length) h=E.sort(function(x,y){ return ((x[0]?1:0)-(y[0]?1:0))||(x[1]-y[1]); }).map(function(x){ return x[2]; }).join('');
   if(nat===null) h+='<div class="sub">מחפש במאגר הלאומי…</div>';
-  else h+=nat.map(function(r,i){ return '<button type="button" data-nat="'+i+'">'+esc(shortName(r.shmmitzrach))+'<small>'+Math.round(+r.food_energy||0)+' קק״ל ל-100 ג׳</small></button>'; }).join('');
   if(!ex.length&&!local.length&&nat&&!nat.length) h='<div class="sub">לא נמצא במאגרים. מוצר ממותג? סורקים את הברקוד, או מצלמים את התווית.</div><button type="button" class="ghost" data-label="1">צילום התווית</button>';
   $('#fList').innerHTML=q?h:'';
   var exBtns=ex; document.querySelectorAll('#fList [data-ex]').forEach(function(b){ b.onclick=function(){ pickExtra(exBtns[+b.dataset.ex]); }; });
@@ -1016,7 +1019,7 @@ man.update({'name': 'AVIEL בטא', 'short_name': 'AVIEL β'})
 for f in ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'hero.jpg', 'wk-push.jpg', 'wk-back.jpg', 'wk-legs.jpg', 'wk-glutes.jpg', 'wk-full.jpg']:
     if (ROOT / f).exists(): shutil.copy(ROOT / f, OUT / f)
 (OUT / 'sw.js').write_text("""// בטא: מטמון + התראות פוש (הודעה נמשכת מהשרת)
-const C = 'aviel-beta-v271-""" + __import__('hashlib').md5(h.encode('utf8')).hexdigest()[:8] + """', API = '""" + API + """';
+const C = 'aviel-beta-v272-""" + __import__('hashlib').md5(h.encode('utf8')).hexdigest()[:8] + """', API = '""" + API + """';
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(['./', 'index.html', 'manifest.webmanifest', 'icon-192.png']))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C && k.indexOf(C.replace(/\d.*$/, '')) === 0).map(k => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener('fetch', e => {
