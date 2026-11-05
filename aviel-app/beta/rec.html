@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AVIEL · הקלטה</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+[hidden]{display:none!important} /* "שליחה" ו"הקלטה מחדש" מופיעים רק אחרי הקלטה */
+:root{--bg:#f4f6fa;--card:#fff;--ink:#16202c;--mute:#667085;--line:#e6e9f0;--blue:#0b63b6;--red:#b42318;--green:#12805c}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'Heebo',Arial,sans-serif;font-size:16px}
+.wrap{max-width:480px;margin:0 auto;padding:24px max(16px,env(safe-area-inset-left)) 40px;text-align:center}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--mute);font-size:14px;line-height:1.5}
+.big{width:160px;height:160px;border-radius:50%;border:0;background:var(--red);color:#fff;font:inherit;font-size:20px;font-weight:800;margin:28px auto 10px;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(180,35,24,.25);cursor:pointer}
+.big.on{animation:pulse 1s infinite;background:#8f1d14}
+.big[disabled]{opacity:.5}
+@keyframes pulse{50%{transform:scale(.96);opacity:.8}}
+.time{font-size:28px;font-weight:800;direction:ltr;min-height:36px}
+.st{margin-top:10px;font-size:15px;min-height:24px}
+.st.ok{color:var(--green);font-weight:700}
+.st.err{color:var(--red)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:18px;text-align:right}
+.btn{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font:inherit;font-weight:700;color:var(--ink);text-decoration:none;cursor:pointer}
+.btn.p{background:var(--blue);border-color:var(--blue);color:#fff}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+audio{width:100%;margin-top:10px}
+</style></head><body>
+<div class="wrap">
+  <h1 id="ttl">הקלטה</h1>
+  <div class="sub" id="who"></div>
+  <button type="button" class="big" id="rec">הקלטה</button>
+  <div class="time" id="tm"></div>
+  <div class="st" id="st">לוחצים, מדברים, לוחצים שוב. עד 2 דקות.</div>
+  <div id="prev"></div>
+  <div class="row"><button type="button" class="btn p" id="send" hidden>שליחה</button><button type="button" class="btn" id="again" hidden>הקלטה מחדש</button></div>
+  <div class="card"><div class="sub">אין מיקרופון בדפדפן הזה? מקליטים ב"הקלטות" ומעלים כאן:</div><div class="row"><label class="btn" for="file">בחירת קובץ קול</label><input type="file" id="file" accept="audio/*" hidden></div></div>
+  <div class="row"><a class="btn" id="back" href="#">חזרה לדשבורד</a></div>
+</div>
+<script>
+var API='https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec';
+var Q=new URLSearchParams(location.search), K=Q.get('k')||'', TPL=Q.get('tpl')||'', TO=Q.get('to')||'', WEEKLY=Q.get('weekly')==='1', TITLE=Q.get('t')||'', TEXT=Q.get('text')||'';
+function $(s){ return document.querySelector(s); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+$('#ttl').textContent=TPL?'תבנית: '+TITLE:WEEKLY?'בוקר טוב שבועי':TO?'הודעה קולית ל'+TO:'הקלטה';
+$('#who').textContent=TPL?'מקליטים פעם אחת. אחר כך זה כפתור בכרטיס של כל מתאמן/ת.':WEEKLY?'נשלח ביום ראשון בבוקר למי שנכנס/ה לאפליקציה בשבוע האחרון.':TO?'ההקלטה נדחפת לטלפון ומופיעה בבית של האפליקציה.':'';
+$('#back').onclick=function(e){ e.preventDefault(); if(history.length>1) history.back(); else window.close(); };
+if(!K){ $('#st').textContent='חסר מפתח בקישור. פותחים את הדף מהדשבורד.'; $('#st').className='st err'; $('#rec').disabled=true; }
+var REC=null, BLOB=null, MIME='', tm=null, t0=0;
+function fmt(s){ return Math.floor(s/60)+':'+('0'+s%60).slice(-2); }
+function setBlob(b,mime){ BLOB=b; MIME=mime||b.type||'audio/webm'; $('#prev').innerHTML='<audio controls src="'+URL.createObjectURL(b)+'"></audio>'; $('#send').hidden=false; $('#again').hidden=false; $('#st').textContent='אפשר להאזין, ואז לשלוח.'; $('#st').className='st'; }
+$('#rec').onclick=function(){ var b=this;
+  if(REC){ REC.stop(); return; }
+  if(!navigator.mediaDevices||!window.MediaRecorder){ $('#st').textContent='הדפדפן הזה לא תומך בהקלטה. מעלים קובץ קול למטה.'; $('#st').className='st err'; return; }
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){ var mime=['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg'].filter(function(x){ return MediaRecorder.isTypeSupported(x); })[0]||'';
+    var r=new MediaRecorder(stream,mime?{mimeType:mime}:{}), chunks=[]; t0=Date.now(); tm=setInterval(function(){ var s=Math.round((Date.now()-t0)/1000); $('#tm').textContent=fmt(s); if(s>=120) r.stop(); },250);
+    r.ondataavailable=function(e){ if(e.data.size) chunks.push(e.data); };
+    r.onstop=function(){ clearInterval(tm); stream.getTracks().forEach(function(x){ x.stop(); }); REC=null; b.classList.remove('on'); b.textContent='הקלטה'; var bl=new Blob(chunks,{type:r.mimeType||mime||'audio/webm'}); if(bl.size<2000){ $('#st').textContent='ההקלטה ריקה, נסו שוב.'; $('#st').className='st err'; return; } setBlob(bl,bl.type); };
+    REC=r; r.start(250); b.classList.add('on'); b.textContent='עצירה'; $('#st').textContent='מקליט…'; $('#st').className='st'; $('#prev').innerHTML=''; $('#send').hidden=true; })
+  .catch(function(){ $('#st').textContent='אין גישה למיקרופון. מאשרים בהגדרות הדפדפן, או מעלים קובץ קול למטה.'; $('#st').className='st err'; }); };
+$('#again').onclick=function(){ BLOB=null; $('#prev').innerHTML=''; $('#send').hidden=true; $('#again').hidden=true; $('#tm').textContent=''; $('#st').textContent='לוחצים, מדברים, לוחצים שוב.'; };
+$('#file').onchange=function(){ var f=this.files[0]; this.value=''; if(!f) return; if(f.size>3e6){ $('#st').textContent='הקובץ גדול מדי (עד 3MB).'; $('#st').className='st err'; return; } setBlob(f,f.type); };
+$('#send').onclick=function(){ if(!BLOB) return; var btn=this; btn.disabled=true; $('#st').textContent='שולח…'; $('#st').className='st';
+  var fr=new FileReader(); fr.onload=function(){ var body={api:'coachvoice',k:K,b64:fr.result,mime:MIME}; if(TPL) body.tpl=TPL; else if(WEEKLY) body.weekly=1; else if(TO){ body.to=TO; body.text=TEXT; }
+    fetch(API,{method:'POST',body:JSON.stringify(body)}).then(function(r){ return r.json(); }).then(function(j){ if(!j.ok) throw new Error(j.error||'לא נשלח'); $('#st').textContent=TPL?'נשמר. התבנית מוכנה לשליחה מהכרטיסים.':WEEKLY?'נשמר. יישלח ביום ראשון בבוקר לפעילים.':'נשלח'+(j.devices?' ל-'+j.devices+' מכשירים':''); $('#st').className='st ok'; $('#send').hidden=true; })
+    .catch(function(e){ $('#st').textContent=e.message||'לא נשלח, נסו שוב'; $('#st').className='st err'; btn.disabled=false; }); };
+  fr.readAsDataURL(BLOB); };
+</script>
+</body></html>

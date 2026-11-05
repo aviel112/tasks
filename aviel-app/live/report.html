@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AVIEL · הדוח החודשי</title>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;800&family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f7f3ec;--panel:#fffdf9;--panel2:#f1ece2;--text:#1c1813;--mute:#6b6257;--line:#e6dfd2;--gold:#a8822e;--gold-d:#d8c48f;--good:#2e8551;--bad:#b5473a;--sh:0 10px 30px rgba(60,45,20,.08)}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Heebo',Arial,sans-serif;font-size:15px;line-height:1.5}
+.wrap{max-width:560px;margin:0 auto;padding:22px max(16px,env(safe-area-inset-left)) 60px}
+.brand{font-family:'Frank Ruhl Libre',serif;font-weight:800;letter-spacing:.14em;font-size:13px;color:var(--gold)}
+h1{font-family:'Frank Ruhl Libre',serif;font-size:30px;line-height:1.15;margin:6px 0 2px;text-wrap:balance}
+.sub{color:var(--mute);font-size:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px 18px;margin-top:14px;box-shadow:var(--sh)}
+.label{font-size:12px;letter-spacing:.08em;color:var(--mute);font-weight:700;text-transform:uppercase}
+.big{display:flex;align-items:baseline;gap:10px;margin-top:4px}
+.big b{font-size:36px;font-family:'Frank Ruhl Libre',serif;direction:ltr}
+.big small{color:var(--mute)}
+.up{color:var(--good)}.dn{color:var(--bad)}
+.spark{width:100%;height:110px;display:block;margin-top:8px}
+.spark path{fill:none;stroke:var(--gold);stroke-width:2.2;stroke-linejoin:round}
+.spark .area{fill:var(--gold);opacity:.08;stroke:none}
+.sx{display:flex;justify-content:space-between;font-size:12px;color:var(--mute)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}
+.grid>div{background:var(--panel2);border-radius:14px;padding:10px 12px}
+.grid b{display:block;font-size:22px;direction:ltr;text-align:right}
+.grid small{color:var(--mute);font-size:12.5px}
+.lift{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line)}
+.lift:last-child{border:0}
+.lift .v{direction:ltr;font-weight:800;white-space:nowrap}
+.lift .v small{font-weight:600;color:var(--good);margin-left:6px}
+.note{font-size:16px;line-height:1.6;white-space:pre-wrap}
+.sig{margin-top:12px;font-family:'Frank Ruhl Libre',serif;font-weight:700;color:var(--gold)}
+.vplay{display:inline-flex;align-items:center;gap:8px;background:var(--text);color:#fff;border:0;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;margin-top:10px;cursor:pointer}
+.vplay svg{width:18px;height:18px;fill:currentColor}
+.empty{color:var(--mute);text-align:center;padding:40px 10px}
+.foot{margin-top:26px;text-align:center;color:var(--mute);font-size:13px}
+@media (prefers-color-scheme:dark){:root{--bg:#0d0d0f;--panel:#17161a;--panel2:#222026;--text:#f3eee6;--mute:#a39b90;--line:#2b2930;--gold:#d6b066;--gold-d:#6b5a32;--sh:none}}
+</style></head><body>
+<div class="wrap" id="app"><div class="empty">טוען את הדוח…</div></div>
+<script>
+var API='https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec';
+var T=(new URLSearchParams(location.search).get('t')||'').replace(/[^A-Za-z0-9]/g,'');
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function sg(n){ return (n>0?'+':'')+n; }
+function spark(sp){ if(!sp||sp.length<2) return ''; var W=320,H=110,P=10, ks=sp.map(function(x){ return x.kg; }), mn=Math.min.apply(null,ks), mx=Math.max.apply(null,ks), r=(mx-mn)||1;
+  var now=new Date(), ts=sp.map(function(x){ var q=String(x.d).split('/'), d=new Date(now.getFullYear(),(+q[1]||1)-1,+q[0]||1); if(d-now>2*864e5) d.setFullYear(d.getFullYear()-1); return d.getTime(); }), t0=ts[0], span=ts[ts.length-1]-t0; /* מרווח לפי תאריך, לא לפי מספר השקילה */
+  var pts=sp.map(function(x,i){ return [P+(span>0?(ts[i]-t0)/span:i/(sp.length-1))*(W-2*P), H-P-(x.kg-mn)/r*(H-2*P)]; }), d=pts.map(function(p,i){ return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1); }).join(' ');
+  return '<svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true"><path class="area" d="'+d+' L'+pts[pts.length-1][0].toFixed(1)+' '+H+' L'+pts[0][0].toFixed(1)+' '+H+' Z"/><path d="'+d+'"/></svg><div class="sx" dir="ltr"><span>'+esc(sp[0].d)+'</span><span>'+esc(sp[sp.length-1].d)+'</span></div>'; }
+function render(r){
+  var h='<div class="brand">AVIEL · ליווי אישי</div><h1>'+esc(r.first)+', החודש שלך</h1><div class="sub">'+esc(r.range)+'</div>';
+  var w=r.weight||{}; if(w.first!=null&&w.last!=null){ var d=Math.round((w.last-w.first)*10)/10, goalLoss=!/עלי|מסה/.test(r.goal||'');
+    h+='<div class="card"><div class="label">משקל</div><div class="big"><b>'+w.last+'</b><small>ק״ג · <span class="'+((goalLoss?d<0:d>0)?'up':d===0?'':'dn')+'">'+sg(d)+'</span> מתחילת החודש · '+w.n+' שקילות</small></div>'+spark(w.spark)+'</div>'; }
+  var M=r.measures; if(M&&M.items&&M.items.length) h+='<div class="card"><div class="label">היקפים · '+(M.from===M.to?'מדידה מ-'+esc(M.to):esc(M.from)+' ← '+esc(M.to))+'</div><div class="grid">'+M.items.map(function(x){ return '<div><b>'+x.now+(x.diff?' <span class="'+(x.diff<0?'up':'dn')+'" style="font-size:13px">'+sg(x.diff)+'</span>':'')+'</b><small>'+esc(x.l)+'</small></div>'; }).join('')+'</div></div>';
+  if(r.lifts&&r.lifts.length) h+='<div class="card"><div class="label">כוח · שיאים החודש</div>'+r.lifts.map(function(l){ return '<div class="lift"><span>'+esc(l.ex)+'</span><span class="v">'+l.now+' ק״ג'+(l.diff>0?'<small>'+sg(l.diff)+'</small>':'')+'</span></div>'; }).join('')+'</div>';
+  var a=r.adh||{}; h+='<div class="card"><div class="label">התמדה</div><div class="grid"><div><b>'+(a.trains||0)+'</b><small>אימונים</small></div><div><b>'+(a.weighs||0)+'</b><small>שקילות</small></div><div><b>'+(a.food||0)+'</b><small>ימי יומן</small></div><div><b>'+(a.checkins||0)+'</b><small>צ׳ק-אינים</small></div></div>'+(a.steps?'<div class="sub" style="margin-top:8px">צעדים: '+a.steps.toLocaleString('he-IL')+' ליום בממוצע</div>':'')+'</div>';
+  if(r.note||r.voice) h+='<div class="card"><div class="label">מאביאל</div>'+(r.note?'<div class="note">'+esc(r.note)+'</div>':'')+(r.voice?'<button type="button" class="vplay" id="vp"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg><span>הסיכום בקול שלי</span></button>':'')+'<div class="sig">אביאל</div></div>';
+  if(r.next) h+='<div class="card"><div class="label">היעד לחודש הבא</div><div class="note">'+esc(r.next)+'</div></div>';
+  h+='<div class="foot">הדוח נבנה מהנתונים שרשמת באפליקציה. הופק '+esc(r.made)+'</div>';
+  document.getElementById('app').innerHTML=h;
+  var vp=document.getElementById('vp'); if(vp){ var A=null; vp.onclick=function(){ if(A){ if(A.paused) A.play(); else A.pause(); return; } vp.disabled=true; fetch(API+'?api=voice&t='+T+'&p=%7B%7D').then(function(x){ return x.json(); }).then(function(j){ vp.disabled=false; if(!j.ok||!j.r||!j.r.b64) return; A=new Audio('data:'+(j.r.mime||'audio/mp4')+';base64,'+j.r.b64); A.play(); }).catch(function(){ vp.disabled=false; }); }; }
+}
+fetch(API+'?api=report&t='+T+'&p=%7B%7D').then(function(x){ return x.json(); }).then(function(j){ if(!j.ok) throw new Error(j.error||'לא נטען'); render(j.r); }).catch(function(e){ document.getElementById('app').innerHTML='<div class="empty">'+esc(e.message)+'</div>'; });
+</script>
+</body></html>

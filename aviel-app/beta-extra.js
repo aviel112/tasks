@@ -2389,7 +2389,7 @@ var PICK_ON=true, PICK_FORCE=false, WK_IMG={}, WK_HAVE_LIST=['wk-push.jpg','wk-l
 /* 4.11.26 (אביאל): טיימר מנוחה שנשמע גם מחוץ לאפליקציה. iOS מקפיא את הדף ברקע, אז בלחיצה על הסט מתחילים לנגן קובץ שקט באורך המנוחה
    שבסופו כבר מוקלטים 3 הטיקים והפעמון. אודיו שמתנגן ממשיך ברקע. בינתיים רק אצל אביאל (או aviel_bgt=1) עד שייבדק באייפון באימון */
 (function(){
-  function on(){ try{ if(localStorage.getItem('aviel_bgt')==='0') return false; if(localStorage.getItem('aviel_bgt')==='1') return true; }catch(e){} return typeof D!=='undefined'&&D&&/^אביאל/.test(String(D.name||'')); }
+  function on(){ return false; } /* 5.11.26: כבוי. באייפון הקובץ עצר את המוזיקה ולא נשמע מחוץ לאפליקציה. במקומו: התראה מהשרת (למטה) */
   var SR=16000, au=null, url='', endAt=0;
   function wav(sec){ var n=Math.round(sec*SR), b=new ArrayBuffer(44+n*2), v=new DataView(b), s=new Int16Array(b,44,n);
     function w(o,t){ for(var i=0;i<t.length;i++) v.setUint8(o+i,t.charCodeAt(i)); }
@@ -2434,3 +2434,17 @@ var PICK_ON=true, PICK_FORCE=false, WK_IMG={}, WK_HAVE_LIST=['wk-push.jpg','wk-l
   function mark(){ document.querySelectorAll('#progBox .card.ex').forEach(function(c){ var rows=c.querySelectorAll('form.setrow'), first=null; rows.forEach(function(f){ if(!first&&!f.classList.contains('ok')) first=f; }); rows.forEach(function(f){ var w=f===first; if(f.classList.contains('cur')!==w) f.classList.toggle('cur',w); }); }); }
   var box=document.getElementById('progBox'); if(box) new MutationObserver(function(){ requestAnimationFrame(mark); }).observe(box,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
 })();
+
+/* 5.11.26 (אביאל: "לא שמעתי. רוצה שישמעו את זה בנוסף למוזיקה, גם מחוץ לאפליקציה"): בתחילת מנוחה האפליקציה שולחת לשרת את זמן הסוף,
+   והשרת שולח התראה עם צליל בדיוק אז. המוזיקה ממשיכה. כשהאפליקציה פתוחה בסוף המנוחה, מבטלים את ההתראה והפעמון הרגיל מצלצל */
+(function(){ var sentEnd=0, dropped=0;
+  function can(){ try{ return localStorage.getItem('aviel_push')==='1'&&'Notification' in window&&Notification.permission==='granted'; }catch(e){ return false; } }
+  function send(end){ var seq=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+    var u=API+'?api=restpush&t='+encodeURIComponent(T)+'&p='+encodeURIComponent(JSON.stringify({end:end,seq:seq}))+'&_='+Date.now();
+    try{ fetch(u,{keepalive:true}).catch(function(){}); }catch(e){} }
+  setInterval(function(){ if(!can()) return; var E=typeof REST_END!=='undefined'?REST_END:0, now=Date.now();
+    if(E&&E!==dropped&&E-now>8000&&Math.abs(E-sentEnd)>1500){ sentEnd=E; send(E); return; } /* מנוחה חדשה או ‎±15 */
+    if(sentEnd&&(!E||(document.visibilityState==='visible'&&E-now<6000))){ dropped=E; sentEnd=0; send(0); } /* בוטלה, או שהאפליקציה פתוחה לקראת הסוף */
+  },500);
+})();
+
