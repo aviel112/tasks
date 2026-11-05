@@ -70,6 +70,7 @@ const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(ROOT, '.wwebjs_auth') }),
   puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] },
 })
+{ const _send = client.sendMessage.bind(client); client.sendMessage = (to, ...r) => _send(to === config.owner && UPD_UNTIL > Date.now() && updGid() ? updGid() : to, ...r) } // 5.11.26 מענה בקבוצת העדכונים
 
 // ── פעולות אמיתיות שהמוח מבקש בפורמט מובנה (לא קוד חופשי) ──
 const REM_PATH = path.join(ROOT, 'reminders.json')
@@ -867,6 +868,10 @@ async function techReply(text) { const m = String(text || '').trim().match(/^ש�
 // ── קבוצת "עדכוני מתאמנים" (5.11.26, אביאל): ניתוח בדיקות דם ותמונות נשלחים לשם, לא לצ'אט עם העוזרת ──
 // אביאל פותח את הקבוצה מהטלפון וכותב בה משהו; מזהים לפי השם (או המילה "עדכונים") ושומרים את המזהה
 const UPD_PATH = path.join(ROOT, 'updates-group.json')
+let UPD_UNTIL = 0 // אחרי הודעה של אביאל בקבוצת העדכונים: 3 דקות שבהן מה שנשלח "לאביאל" הולך לקבוצה
+function updShort(a) { const L = String(a.body || '').split('\n').map((x) => x.trim()).filter(Boolean), out = []; let sum = L[0] || ''; const dot = sum.search(/[.!?](\s|$)/); if (dot > 0 && dot < 160) sum = sum.slice(0, dot + 1); else if (sum.length > 160) sum = sum.slice(0, 157) + '...'
+  out.push(sum); L.slice(1).forEach((x) => { if (/^\d\./.test(x)) { if (out.filter((y) => /^\d\./.test(y)).length < 3) out.push(x.length > 110 ? x.slice(0, 107) + '...' : x) } else if (/^(מחוץ לטווח|חולשות|כל הערכים)/.test(x)) out.push(x.length > 140 ? x.slice(0, 137) + '...' : x) })
+  return '*' + a.title + '*\n' + out.join('\n') }
 function updGid() { try { return JSON.parse(fs.readFileSync(UPD_PATH, 'utf8')).gid || '' } catch { return '' } }
 async function updGroupAdopt(msg, cid) {
   const g = updGid(); if (g) return cid === g
@@ -880,7 +885,7 @@ async function coachAlertsPull() {
   try {
     const r = await fetch('https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec', { method: 'POST', body: JSON.stringify({ api: 'coach', k: 'c7dfe880cf024fc59fcc9a8a', fn: 'dashboardCoachAlerts', args: [] }) })
     const j = await r.json(), q = (j && j.ok && Array.isArray(j.r)) ? j.r : []
-    for (const a of q) { if (a.kind === 'tech' && a.name && a.reply) TECH_PENDING[String(a.name).split(' ')[0]] = { name: a.name, reply: a.reply, at: Date.now() }; if (a.kind === 'swap' && a.name && a.id) SWAP_PENDING[String(a.name).split(' ')[0]] = { name: a.name, id: a.id, at: Date.now() }; if (a.kind === 'meet' && a.name && a.text) MEET_PENDING[String(a.name).split(' ')[0]] = { name: a.name, text: a.text, at: Date.now() }; await client.sendMessage(a.kind === 'upd' && updGid() ? updGid() : config.owner, toWhatsApp(drafts.stripEmoji('*' + a.title + '*\n' + (a.body || '')).trim())).catch(() => {}) }
+    for (const a of q) { if (a.kind === 'tech' && a.name && a.reply) TECH_PENDING[String(a.name).split(' ')[0]] = { name: a.name, reply: a.reply, at: Date.now() }; if (a.kind === 'swap' && a.name && a.id) SWAP_PENDING[String(a.name).split(' ')[0]] = { name: a.name, id: a.id, at: Date.now() }; if (a.kind === 'meet' && a.name && a.text) MEET_PENDING[String(a.name).split(' ')[0]] = { name: a.name, text: a.text, at: Date.now() }; await client.sendMessage(a.kind === 'upd' && updGid() ? updGid() : config.owner, toWhatsApp(drafts.stripEmoji(a.kind === 'upd' ? updShort(a) : '*' + a.title + '*\n' + (a.body || '')).trim())).catch(() => {}) }
   } catch (e) { console.error('coachAlertsPull', e.message) }
 }
 cron.schedule('*/2 * * * *', coachAlertsPull, { timezone: 'Asia/Jerusalem' })
@@ -1079,7 +1084,7 @@ function onIncoming(msg) {
     if (config.owner && cid === config.owner) {
       console.log('[msg]', JSON.stringify({ from: msg.from, to: msg.to, fromMe: msg.fromMe, cid, text: text.slice(0, 60) }))
     }
-    if (cid && cid.endsWith('@g.us')) { const ug = updGid(); if (cid === ug) return; if (!ug && msg.type === 'chat' && (msg.fromMe || msg.author === config.owner)) updGroupAdopt(msg, cid).catch(() => {}) } // 5.11.26 קבוצת "עדכוני מתאמנים"
+    if (cid && cid.endsWith('@g.us')) { const ug = updGid(); if (cid === ug) { if (config.owner && msg.author === config.owner && !String(msg.body || '').startsWith(BOT_MARK)) { UPD_UNTIL = Date.now() + 3 * 60000; const pm = Object.create(msg); Object.defineProperties(pm, { from: { value: config.owner }, fromMe: { value: false }, author: { value: undefined } }); onIncoming(pm) } return } /* תשובה בקבוצת העדכונים = כמו בצ'אט עם העוזרת, והמענה חוזר לקבוצה */ if (!ug && msg.type === 'chat' && (msg.fromMe || msg.author === config.owner)) updGroupAdopt(msg, cid).catch(() => {}) } // 5.11.26 קבוצת "עדכוני מתאמנים"
     if (cid && cid.endsWith('@g.us')) { const ag = groupAgents.agentFor(cid); if (ag) { if (msg.type === 'chat') ag.handle(msg); return } if (msg.type === 'chat' && (msg.fromMe || msg.author === config.owner)) groupAgents.adopt(msg, cid).then((a) => { if (a) a.handle(msg) }).catch(() => {}); return } // קבוצות הסוכנים
     if (!cid || cid.endsWith('@g.us')) return // בלי קבוצות
 
@@ -1646,7 +1651,7 @@ ROUTINES.reels = weeklyScripts
 cron.schedule(config.reelsCron, weeklyScripts, { timezone: 'Asia/Jerusalem' })
 scheduleRoutine(config.monthlyCron, MONTHLY_PROMPT, 'monthly', false) // 1 לחודש בבוקר
 
-try { advisor.install({ client, config, toWhatsApp, drafts, biz, profiles, askBrainOnce, isReady: () => clientReady, offerDraft: (id) => offerDraft(id) }) } catch (e) { console.error('[advisor-install]', e.message) }
+try { advisor.install({ client, config, toWhatsApp, drafts, biz, profiles, askBrainOnce, isReady: () => clientReady, offerDraft: (id) => offerDraft(id), updGid }) } catch (e) { console.error('[advisor-install]', e.message) }
 
 // השלמה: [מפתח, מתי (דקות מחצות), עד מתי רלוונטי, ימים (0=ראשון), פונקציה]
 const CATCHUP = [
