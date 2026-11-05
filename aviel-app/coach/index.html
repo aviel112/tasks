@@ -1634,4 +1634,12 @@ details.tgrp>summary{list-style:none;cursor:pointer;display:flex;justify-content
   setTimeout(pick,500);
 })();
 </script>
+<script>
+/* 5.11.26 (אביאל: "קישור שאוכל להאריך ליהלי את הליווי"): קישור ישיר לכרטיס מתאמן. ‎#c=שם פותח את הכרטיס, ‎&renew פותח גם את "תשלום וחידוש" */
+(function(){ var m=location.hash.match(/^#c=([^&]+)(&renew)?/); if(!m) return; var nm=decodeURIComponent(m[1]), rn=!!m[2], n=0;
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  (function wait(){ if(++n>60) return; if(typeof L==='undefined'||!L||!L.clients||typeof openCard!=='function') return setTimeout(wait,500);
+    var c=L.clients.filter(function(x){ return x.name===nm||x.name.indexOf(nm)===0; })[0]; if(!c){ toast('לא מצאתי את '+nm); return; } openCard(c.name); if(!rn) return; var k=0;
+    (function find(){ var b=document.querySelector('[data-renew]'); if(!b){ if(++k<40) setTimeout(find,500); return; } var d=b.closest('details'); if(d) d.open=true; b.scrollIntoView({block:'center'}); })(); })(); })();
+</script>
 </body></html>
