@@ -303,13 +303,14 @@ async function renewalsTick() {
     const st = state.renewals[c.name] || (state.renewals[c.name] = { sent: {}, endKey: null })
     const endKey = c.end.toISOString().slice(0, 10)
     if (st.endKey !== endKey) { st.sent = {}; st.endKey = endKey } // חודש/תאריך חדש = מחזור חדש
-    const stage = c.daysLeft <= 0 ? 'd0' : c.daysLeft <= 7 ? 'd7' : c.daysLeft <= 14 ? 'd14' : null
+    const stage = c.daysLeft <= 0 ? 'd0' : c.daysLeft <= 3 ? 'd3' : c.daysLeft <= 7 ? 'd7' : c.daysLeft <= 14 ? 'd14' : null /* 5.11.26 אביאל: גם 3 ימים לפני */
     if (!stage || st.sent[stage]) continue
     if (c.balance > 500 && stage !== 'd0') { st.sent[stage] = 'skip-balance'; changed = true; await sayU(`*${c.name.split(' ')[0]} מסיים בעוד ${c.daysLeft} ימים*\nיתרה פתוחה ${c.balance} ₪. קודם התשלום, אחר כך החידוש.`); continue }
     const weeks = c.start ? Math.max(1, Math.round((Date.now() - c.start.getTime()) / (7 * DAY))) : 4
     const n = c.name.split(' ')[0]
     const text = stage === 'd14' ? renewalText(c, weeks)
       : stage === 'd7' ? `${n}, עוד שבוע התהליך נגמר. ממשיכים או עוצרים? שתי התשובות בסדר, רק שאדע כדי לשמור לך מקום.`
+      : stage === 'd3' ? `${n}, עוד 3 ימים התהליך שלנו נגמר. ממשיכים? אם כן, אני מסדר שהחודש הבא יתחיל בלי הפסקה.`
       : `${n}, היום התהליך שלנו נגמר רשמית. הגישה לאפליקציה נשארת לך עוד 7 ימים. אם תרצה לחזור, הכול שמור, רק תגיד.`
     const did = await makeDraft(c.phone, c.name, text, { kind: 'renewal', name: c.name, stage })
     st.sent[stage] = new Date().toISOString(); changed = true
