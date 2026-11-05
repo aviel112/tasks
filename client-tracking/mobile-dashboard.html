@@ -1585,4 +1585,29 @@ details.tgrp>summary{list-style:none;cursor:pointer;display:flex;justify-content
   loadFood(); setInterval(loadFood,10*60000);
 })();
 </script>
+<script>
+/* 5.11.26 (אביאל: "כל פעם שאני מסמן משהו זה מקפיץ אותי לראש העמוד"): עיגון גלילה. זוכרים את הכרטיס שבראש המסך,
+   ואחרי כל שינוי בעמוד (בנייה מחדש, כרטיס שנטען מאוחר, קיפול) מחזירים אותו לאותו מקום. ספארי לא עושה את זה לבד */
+(function(){ document.documentElement.style.overflowAnchor='none'; document.body.style.overflowAnchor='none';
+  var SEL='.card,.task,details,.lead,.cl,.row,li', A=null, busy=false, touchT=0;
+  function sec(){ return document.querySelector('section[data-v]:not([hidden])'); }
+  function key(el){ if(el.id) return '#'+el.id; var b=el.querySelector('[data-skip],[data-done],[data-snz],[data-st],[data-open],[data-name],[data-czk]');
+    if(b){ for(var k in b.dataset) return k+'='+b.dataset[k]; } return el.className+'|'+(el.textContent||'').replace(/\s+/g,' ').trim().slice(0,50); }
+  function pick(){ var s=sec(); if(!s||window.scrollY<40){ A=null; return; } var c=s.querySelectorAll(SEL), out=[];
+    for(var i=0;i<c.length&&out.length<4;i++){ var r=c[i].getBoundingClientRect(); if(r.height&&r.bottom>8&&r.top>-r.height+8&&r.top<innerHeight*.6) out.push({el:c[i],k:key(c[i]),top:r.top}); }
+    A=out.length?out:null; }
+  function fix(){ if(!A||busy) return; var s=sec(); if(!s) return; busy=true;
+    for(var i=0;i<A.length;i++){ var a=A[i], el=a.el;
+      if(!el.isConnected||!s.contains(el)){ el=null; var c=s.querySelectorAll(SEL); for(var j=0;j<c.length;j++){ if(key(c[j])===a.k){ el=c[j]; break; } } }
+      if(!el) continue; var t=el.getBoundingClientRect().top, d=t-a.top; if(Math.abs(d)>1) window.scrollBy(0,d); break; }
+    busy=false; pick(); }
+  var raf=0; window.addEventListener('scroll',function(){ if(busy||Date.now()<hold) return; clearTimeout(raf); raf=setTimeout(pick,60); },{passive:true});
+  window.addEventListener('touchstart',function(){ touchT=Date.now(); pick(); },{passive:true,capture:true});
+  var hold=0; document.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('[data-su],[data-tdgo],[data-ctab],[data-bgo]:not([aria-expanded]),[data-cq]')){ A=null; hold=Date.now()+1500; return; } pick(); },true); /* כפתור שמעביר למקום אחר: לא מחזירים */
+  new MutationObserver(function(){ if(Date.now()<hold) return; fix(); }).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','open']});
+  /* מעבר לשונית עולה לראש בכוונה: לא לעגן אז */
+  var _sh=window.show; if(typeof _sh==='function') window.show=function(){ A=null; var r=_sh.apply(this,arguments); setTimeout(pick,50); return r; };
+  setTimeout(pick,500);
+})();
+</script>
 </body></html>
