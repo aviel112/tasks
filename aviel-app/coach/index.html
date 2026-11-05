@@ -810,7 +810,7 @@ function weakHtml(w){ var h='<div class="gh">ניתוח חולשות מתמונ�
     w.weak.map(function(x){ return '<div class="wkrow"><span class="wkp p'+x.pri+'">'+(x.pri===1?'עדיפות ראשונה':x.pri===2?'חשוב':'משני')+'</span><b>'+esc(x.mu)+'</b><div class="s">'+esc(x.state)+'</div><div class="s" style="color:var(--text)">'+esc(x.focus)+'</div></div>'; }).join('')+(w.posture?'<div class="s" style="font-size:13px;margin-top:6px"><b>יציבה:</b> '+esc(w.posture)+'</div>':'')+
     (w.recs&&w.recs.length?'<div class="gh" style="margin-top:12px">המלצות לתוכנית</div>'+w.recs.map(function(x,i){ return '<div class="s" style="margin:4px 0;color:var(--text)">'+(i+1)+'. '+esc(x)+'</div>'; }).join(''):'')+
     '<button class="btn" id="wkRecs" style="width:100%;margin-top:8px">'+(w.recs&&w.recs.length?'המלצות מחדש לפי התוכנית הנוכחית':'המלצות לתוכנית לפי החולשות')+'</button>'+
-    '<div class="s" style="font-size:12px;color:var(--mute);margin-top:8px">הדגשים נכנסים אוטומטית להערות בתוכנית הבאה שתבנה. כשמתאמן/ת מעלה 4 תמונות, הניתוח וההמלצות מגיעים אליך לוואטסאפ לבד.</div>'; }
+    '<div class="s" style="font-size:12px;color:var(--mute);margin-top:8px">הדגשים נכנסים אוטומטית להערות בתוכנית הבאה שתבנה. כשמתאמן/ת מעלה 4 תמונות, הניתוח וההמלצות מגיעים אליך לבד: התראה כאן ומשימה בעמוד המשימות.</div>'; }
   else h+='<div class="s" style="font-size:13px;color:var(--mute);margin-bottom:8px">המתאמן/ת מעלה 3-4 תמונות באפליקציה (התקדמות ← תמונות: חזית, גב, צד, פוזת רחב-גבי). אחרי זה לוחצים כאן.</div>';
   return h+'<button class="btn'+(w?'':' p')+'" id="wkGo" style="width:100%;margin-top:8px">'+(w?'ניתוח מחדש':'ניתוח מהתמונות')+'</button>'; }
 /* המוח (28.10.26): הצעה שבועית — אביאל מאשר, משנה או דוחה. שום דבר לא משתנה בלי אישור */
