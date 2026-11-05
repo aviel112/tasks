@@ -589,6 +589,10 @@ async function outboxTick0() {
     if ((obSent()[m.id] || {}).st === 'נשלח') { await fetch(`${base}&done=${encodeURIComponent(m.id)}&st=${encodeURIComponent('נשלח')}`, { redirect: 'follow' }).catch(() => {}); continue } // כבר יצא — רק מאשרים שוב לשרת
     try { await ctx.drafts.sendToClient({ phone: normPhone(m.phone) || m.phone, name: m.label || m.phone, alias: m.label || '', chat_jid: '' }, m.text) }
     catch (e) { st = 'נכשל: ' + (/not.*(on )?whatsapp|not registered|no such|invalid/i.test(e.message) ? 'המספר לא רשום בווטסאפ' : /ECONNREFUSED|fetch failed|bridge/i.test(e.message) ? 'הווטסאפ העסקי במק לא מחובר' : e.message).slice(0, 90) }
+    /* 5.11.26: הודעה עם קישור לאפליקציה → מצרפים אחריה את סרטון ההסבר (intro.mp4) */
+    if (st === 'נשלח' && /aviel112\.github\.io\/aviel-app\/[a-z]+-\d{3,5}/.test(m.text || '')) {
+      try { await fetch('http://127.0.0.1:8080/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: `${normPhone(m.phone) || m.phone}@s.whatsapp.net`, message: '', media_path: require('path').join(__dirname, '..', 'aviel-app', 'live', 'intro.mp4') }), signal: AbortSignal.timeout(60000) }) } catch (e) { console.error('[outbox-intro]', e.message) }
+    }
     log(`outbox ${m.id} ${m.label || m.phone}: ${st}`)
     try { obMark(m.id, st) } catch (e) { console.error('[outbox-mark]', e.message) }
     await fetch(`${base}&done=${encodeURIComponent(m.id)}&st=${encodeURIComponent(st)}`, { redirect: 'follow' }).catch(() => {})
