@@ -552,6 +552,25 @@ async function intakeWatchTick() {
   if (changed) saveState(state)
 }
 
+// ── מעקב הזנה (9.11.26, אביאל: "שנהיה במעקב אחרי מאור שהוא מזין הכל"): כל ערב ב-21:00 סיכום של מה הוזן היום — שקילה, אוכל, אימון ──
+async function logWatchTick() {
+  if (!ctx.config.owner || !ctx.isReady()) return
+  const state = loadState(); const L = state.logWatch || []; if (!L.length) return
+  const now = new Date(), d = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }), h = +now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', hour: 'numeric', hour12: false })
+  if (h < 21 || state.logWatchDay === d) return
+  const pulse = await coachApi('dashboardPulse').catch(() => null); if (!pulse) return
+  const dm = d.slice(8, 10) + '/' + d.slice(5, 7), out = []
+  for (const name of L) {
+    const p = pulse[name] || {}, sp = p.spark || [], kg = sp[sp.length - 1]
+    const f = await coachApi('dashboardFoodDay', [name, d]).catch(() => null), it = (f && f.items) || []
+    const kcal = Math.round(it.reduce((a, x) => a + (+x.k || 0), 0)), meals = [...new Set(it.map((x) => x.m).filter(Boolean))]
+    const seen = {}, dup = it.filter((x) => { const k = x.f + '|' + x.k; if (seen[k]) return true; seen[k] = 1; return false }).map((x) => x.f)
+    out.push(`*${name}*\nשקילה: ${kg > 0 ? kg + ' ק״ג' : 'לא נשקל היום'}\nאוכל: ${it.length ? `${it.length} פריטים, ${kcal} קק״ל (${meals.join(', ')})` : 'לא הזין כלום'}\nאימון: ${p.lastLift === dm ? 'נרשם היום' : 'לא נרשם היום'}${dup.length ? '\nנראה כפול: ' + dup.join(', ') : ''}`)
+  }
+  await sayU('מעקב הזנה להיום\n\n' + out.join('\n\n'))
+  state.logWatchDay = d; saveState(state)
+}
+
 // ── בוט 11: ביקורות גוגל (שבוע 4, רק למי שבקצב; צריך קישור ביקורות: "קישור ביקורות <url>") ──
 async function reviewTick() {
   if (!ctx.config.owner || !ctx.isReady() || !inWindow()) return
@@ -683,6 +702,7 @@ const BOTS = {
   integrity: { name: 'בדיקת סדר', what: 'שמות כפולים, טלפון כפול, פעיל בלי תיקייה, נתונים בשם שלא בלוח — רק אם יש ממצאים', every: 'ראשון 8:15', fn: () => integrityTick() },
   outbox: { name: 'שליחה מהדשבורד', what: 'הודעות שנשלחו מהדשבורד יוצאות מהווטסאפ העסקי', every: 'כל 20 שנ׳', fn: () => outboxTick() },
   jump: { name: 'קפיצה בשקילה', what: 'שקילה של היום רחוקה ביותר מק״ג מהממוצע: הודעה מוכנה למתאמן, פעם ביום', every: 'כל 20 דק׳', fn: () => weighJumpTick() },
+  logwatch: { name: 'מעקב הזנה', what: 'סיכום ערב (21:00) של שקילה, אוכל ואימון למי שברשימת logWatch', every: 'כל 20 דקות, שולח פעם ביום', fn: () => logWatchTick() },
   intake: { name: 'מעקב טופס קבלה', what: 'הודעה כשמתאמן חדש ממלא את הטופס (רשימה ב-intakeWatch)', every: 'כל שעה', fn: () => intakeWatchTick() },
   story: { name: 'סטורי יומי', what: 'רעיון סטורי במספרים + מה לצלם + איזה סטיקר, רוטציה של 14', every: '10:30', fn: () => storyTick() },
 }
@@ -763,6 +783,7 @@ function install(c) {
   every(60 * 60000, 'review', 9 * 60000)
   every(20 * 60000, 'jump', 10 * 60000) // קפיצה בשקילה
   every(60 * 60000, 'intake', 3 * 60000) // מעקב טופס קבלה
+  every(20 * 60000, 'logwatch', 11 * 60000) // מעקב הזנה, 21:00
   cron.schedule('30 10 * * *', () => run('story'), { timezone: 'Asia/Jerusalem' })
   cron.schedule('5 9 * * *', () => run('daily'), { timezone: 'Asia/Jerusalem' })
   cron.schedule('30 8 * * *', () => run('morning'), { timezone: 'Asia/Jerusalem' })
