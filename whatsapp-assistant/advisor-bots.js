@@ -504,6 +504,40 @@ async function nudgeTick() {
   if (changed) saveState(state)
 }
 
+// ── בוט 12: קפיצה בשקילה (9.11.26, אביאל: "תשלח לי התראה לשלוח לו הודעה") ──
+// שקילה של היום רחוקה ביותר מק״ג מהממוצע של הימים הקודמים (בלי שקילה חריגה) → הודעה מוכנה לקבוצת העדכונים. פעם ביום למתאמן, בלי משפחה/בדיקה
+async function coachApi(fn, args = []) {
+  const { coachAlerts } = JSON.parse(fs.readFileSync(path.join(__dirname, 'brain', 'secrets.local.json'), 'utf8'))
+  const r = await fetch(coachAlerts.api, { method: 'POST', redirect: 'follow', body: JSON.stringify({ api: 'coach', k: coachAlerts.coachKey, fn, args }), signal: AbortSignal.timeout(60000) }).then((x) => x.json())
+  if (!r.ok) throw new Error(r.error || fn)
+  return r.r
+}
+const JUMP_TEXT = (n, kg, avg, up) => up
+  ? `${n}, ראיתי את השקילה של היום. ${kg} מול ממוצע של ${avg} בשבוע, וזה לגמרי בסדר. קפיצה של יום זה מים, מלח ופחמימות, לא שומן. ממשיכים כרגיל לפי התפריט, בלי להוריד אוכל ובלי לפצות. מה שאני מסתכל עליו זה הממוצע השבועי.`
+  : `${n}, ראיתי את השקילה של היום. ${kg} מול ממוצע של ${avg} בשבוע. ירידה כזו ביום אחד היא בעיקר מים, אז לא משנים כלום וממשיכים לפי התפריט. מה שאני מסתכל עליו זה הממוצע השבועי.`
+async function weighJumpTick() {
+  if (!ctx.config.owner || !ctx.isReady() || !inWindow()) return
+  const [pulse, list, tags] = await Promise.all([coachApi('dashboardPulse'), coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))])
+  const state = loadState(); state.jumps = state.jumps || {}; let changed = false
+  for (const c of (list && list.clients) || []) {
+    if (c.status !== 'פעיל' || !c.phone) continue
+    if ((tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה')) continue
+    const p = pulse[c.name]; const sp = (p && p.spark) || []; const kg = +sp[sp.length - 1]
+    if (!(kg > 0)) continue // לא נשקל היום
+    const key = `${c.name}:${today()}`; if (state.jumps[key]) continue
+    const prev = sp.slice(0, -1).map(Number).filter((x) => x > 0); if (prev.length < 3) continue
+    const med = prev.slice().sort((a, b) => a - b)[Math.floor(prev.length / 2)], ok = prev.filter((x) => Math.abs(x - med) <= 1.5)
+    const avg = Math.round((ok.reduce((a, b) => a + b, 0) / ok.length) * 10) / 10, d = Math.round((kg - avg) * 10) / 10
+    if (Math.abs(d) <= 1) continue
+    const n = String(c.name).split(' ')[0], text = JUMP_TEXT(n, kg, avg, d > 0)
+    const did = await makeDraft(normPhone(c.phone), c.name, text)
+    state.jumps[key] = new Date().toISOString(); changed = true
+    await sayU(`*${n}: קפיצה בשקילה ${d > 0 ? '+' : '−'}${Math.abs(d)} ק״ג* (#${did})\nהיום ${kg}, ממוצע השבוע ${avg}. באפליקציה ${n} כבר קיבל/ה הסבר.\n\n${text}\n\n${hintU(n)}`)
+  }
+  for (const k of Object.keys(state.jumps)) if (Date.now() - Date.parse(state.jumps[k]) > 14 * DAY) { delete state.jumps[k]; changed = true }
+  if (changed) saveState(state)
+}
+
 // ── בוט 11: ביקורות גוגל (שבוע 4, רק למי שבקצב; צריך קישור ביקורות: "קישור ביקורות <url>") ──
 async function reviewTick() {
   if (!ctx.config.owner || !ctx.isReady() || !inWindow()) return
@@ -634,6 +668,7 @@ const BOTS = {
   morning: { name: 'מצב בוקר', what: 'מי צריך הודעה היום (שקילה/צ׳ק-אין/חידוש) + קישור למסך', every: '8:30', fn: () => morningStatus() },
   integrity: { name: 'בדיקת סדר', what: 'שמות כפולים, טלפון כפול, פעיל בלי תיקייה, נתונים בשם שלא בלוח — רק אם יש ממצאים', every: 'ראשון 8:15', fn: () => integrityTick() },
   outbox: { name: 'שליחה מהדשבורד', what: 'הודעות שנשלחו מהדשבורד יוצאות מהווטסאפ העסקי', every: 'כל 20 שנ׳', fn: () => outboxTick() },
+  jump: { name: 'קפיצה בשקילה', what: 'שקילה של היום רחוקה ביותר מק״ג מהממוצע: הודעה מוכנה למתאמן, פעם ביום', every: 'כל 20 דק׳', fn: () => weighJumpTick() },
   story: { name: 'סטורי יומי', what: 'רעיון סטורי במספרים + מה לצלם + איזה סטיקר, רוטציה של 14', every: '10:30', fn: () => storyTick() },
 }
 const botsEnabled = () => { const s = loadState(); return s.bots || {} }
@@ -711,6 +746,7 @@ function install(c) {
   every(60 * 60000, 'payment', 7 * 60000)
   every(60 * 60000, 'nudge', 8 * 60000)
   every(60 * 60000, 'review', 9 * 60000)
+  every(20 * 60000, 'jump', 10 * 60000) // קפיצה בשקילה
   cron.schedule('30 10 * * *', () => run('story'), { timezone: 'Asia/Jerusalem' })
   cron.schedule('5 9 * * *', () => run('daily'), { timezone: 'Asia/Jerusalem' })
   cron.schedule('30 8 * * *', () => run('morning'), { timezone: 'Asia/Jerusalem' })
