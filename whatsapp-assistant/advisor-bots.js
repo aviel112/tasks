@@ -683,7 +683,7 @@ const BOTS = {
   integrity: { name: 'בדיקת סדר', what: 'שמות כפולים, טלפון כפול, פעיל בלי תיקייה, נתונים בשם שלא בלוח — רק אם יש ממצאים', every: 'ראשון 8:15', fn: () => integrityTick() },
   outbox: { name: 'שליחה מהדשבורד', what: 'הודעות שנשלחו מהדשבורד יוצאות מהווטסאפ העסקי', every: 'כל 20 שנ׳', fn: () => outboxTick() },
   jump: { name: 'קפיצה בשקילה', what: 'שקילה של היום רחוקה ביותר מק״ג מהממוצע: הודעה מוכנה למתאמן, פעם ביום', every: 'כל 20 דק׳', fn: () => weighJumpTick() },
-  intake: { name: 'מעקב טופס קבלה', what: 'הודעה כשמתאמן חדש ממלא את הטופס (רשימה ב-intakeWatch)', every: 'כל 10 דק׳', fn: () => intakeWatchTick() },
+  intake: { name: 'מעקב טופס קבלה', what: 'הודעה כשמתאמן חדש ממלא את הטופס (רשימה ב-intakeWatch)', every: 'כל שעה', fn: () => intakeWatchTick() },
   story: { name: 'סטורי יומי', what: 'רעיון סטורי במספרים + מה לצלם + איזה סטיקר, רוטציה של 14', every: '10:30', fn: () => storyTick() },
 }
 const botsEnabled = () => { const s = loadState(); return s.bots || {} }
@@ -762,7 +762,7 @@ function install(c) {
   every(60 * 60000, 'nudge', 8 * 60000)
   every(60 * 60000, 'review', 9 * 60000)
   every(20 * 60000, 'jump', 10 * 60000) // קפיצה בשקילה
-  every(10 * 60000, 'intake', 3 * 60000) // מעקב טופס קבלה
+  every(60 * 60000, 'intake', 3 * 60000) // מעקב טופס קבלה
   cron.schedule('30 10 * * *', () => run('story'), { timezone: 'Asia/Jerusalem' })
   cron.schedule('5 9 * * *', () => run('daily'), { timezone: 'Asia/Jerusalem' })
   cron.schedule('30 8 * * *', () => run('morning'), { timezone: 'Asia/Jerusalem' })
