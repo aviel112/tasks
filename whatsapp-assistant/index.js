@@ -1174,6 +1174,9 @@ function onIncoming(msg) {
       return
     }
 
+    // 11.11.26 פרוטוקול הקיץ: "פרוטוקול 0501234567 דנה כהן" / "פרוטוקול מצב" / "פרוטוקול עצור <טלפון>" / "פרוטוקול אשר <טלפון>" (protocol.js)
+    if (protocol.isCommand(text)) { queue = queue.then(() => protocol.handleCommand(text)).catch((e) => console.error('[protocol]', e)); return }
+
     // "תמחקי את מה ששלחת לעומר" / "מחק הודעה לשון" / "תמחקי את ההודעה האחרונה" — מחיקה לכולם
     const delM = text.match(/^(?:תמחק|תמחקי|מחק|מחקי|תבטל|תבטלי)\s+(?:את\s+)?(?:מה ששלחת|ההודעה(?:\s+האחרונה)?|הודעה)(?:\s+(?:ש(?:שלחת\s+)?)?(?:ל|של)\s*(.+))?$/)
     if (delM) {
@@ -1658,6 +1661,9 @@ cron.schedule(config.reelsCron, weeklyScripts, { timezone: 'Asia/Jerusalem' })
 scheduleRoutine(config.monthlyCron, MONTHLY_PROMPT, 'monthly', false) // 1 לחודש בבוקר
 
 try { advisor.install({ client, config, toWhatsApp, drafts, biz, profiles, askBrainOnce, isReady: () => clientReady, offerDraft: (id) => offerDraft(id), updGid }) } catch (e) { console.error('[advisor-install]', e.message) }
+// 11.11.26 פרוטוקול הקיץ: פרק פתיחה מיד + שיעור כל בוקר לקונים. הגדרות ב-protocol-config.json (dryRun=true עד שאביאל מפעיל)
+const protocol = require('./protocol')
+try { protocol.install({ sendOwner: (t) => client.sendMessage(config.owner, toWhatsApp(t)), askBrainOnce, readBoard: () => advisor.readBoard(), isReady: () => !!(config.owner && clientReady), previewToOwner: true }) } catch (e) { console.error('[protocol-install]', e.message) }
 
 // השלמה: [מפתח, מתי (דקות מחצות), עד מתי רלוונטי, ימים (0=ראשון), פונקציה]
 const CATCHUP = [
