@@ -189,6 +189,12 @@ async function makeDraft(phone, name, text) {
   return ctx.drafts.add({ chat_jid: jid, phone, name: name || '+' + phone, text })
 }
 
+// 10.11.26 (אביאל: "לפני שאתה שולח בקשה לתשלום או תזכורת, תבדוק איתי"): טיוטה + בקשת אישור בקבוצת העדכונים, לא שליחה ישירה
+async function askApproval(phone, name, text, title) {
+  const did = await makeDraft(phone, name, text); const n = String(name || '').split(' ')[0]
+  await sayU(`*${title}* (#${did})\n${text}\n\n${hintU(n)}`); return did
+}
+
 async function leadCloserTick() {
   if (!ctx.config.owner || !ctx.isReady() || !inWindow()) return
   const state = loadState()
@@ -793,4 +799,4 @@ function install(c) {
   log('installed')
 }
 
-module.exports = { install, onDraftSent, registerLead, parseCloseCommand, handleCloseCommand, parseBotCommand, handleBotCommand, botsStatus, botsText, setBotEnabled, run, BOTS, dailyCloseList, ceoReport, readBoard, leadCloserTick, renewalsTick, proofTick, referralTick, callBriefTick, paymentTick, nudgeTick, reviewTick, storyTick }
+module.exports = { askApproval, install, onDraftSent, registerLead, parseCloseCommand, handleCloseCommand, parseBotCommand, handleBotCommand, botsStatus, botsText, setBotEnabled, run, BOTS, dailyCloseList, ceoReport, readBoard, leadCloserTick, renewalsTick, proofTick, referralTick, callBriefTick, paymentTick, nudgeTick, reviewTick, storyTick }

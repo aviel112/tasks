@@ -1,5 +1,5 @@
 // העוזרת האישית של אביאל — בוט ווטסאפ שמחובר ל-Claude ולמערכות העסק
-const { Client, LocalAuth } = require('whatsapp-web.js')
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
 const qrcode = require('qrcode')
 const cron = require('node-cron')
 const fs = require('fs')
@@ -89,6 +89,7 @@ setInterval(async () => {
     for (const r of due) {
       const ok = await Promise.race([client.sendMessage(config.owner, toWhatsApp('⏰ *תזכורת:* ' + r.text)).then(() => true), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 60000))]).catch((e) => { console.error('[reminder]', e.message); return false }) // שליחה תקועה לא עוצרת את כל התזכורות
       if (!ok) break // נשארת ברשימה — ניסיון נוסף בעוד 30 שניות
+      if (r.file && fs.existsSync(r.file)) await client.sendMessage(config.owner, MessageMedia.fromFilePath(r.file), { sendMediaAsDocument: true }).catch((e) => console.error('[reminder file]', e.message)) // 6.11: תזכורת עם קובץ מצורף (נשלח כמסמך כדי לשמור איכות)
       saveRems(loadRems().filter((x) => !(x.at === r.at && x.text === r.text))) // נמחקת רק אחרי שנשלחה
       console.log('[reminder] fired:', r.text)
     }
@@ -914,7 +915,7 @@ cron.schedule('40 7 * * 0-5', todoMorning, { timezone: 'Asia/Jerusalem' })
 async function leadNudges() {
   if (!config.owner || !clientReady) return; const n0 = ilNow(), h = Math.floor(n0.mins / 60); if (h < 10 || h >= 20 || n0.dow === 6) return
   try { const L = (await coachApi('dashboardLeadNudges')) || []
-    for (const x of L) { try { await drafts.sendToClient({ phone: x.phone, name: x.name, alias: x.name, chat_jid: '' }, x.text); await client.sendMessage(config.owner, toWhatsApp('שלחתי ל' + x.name.split(' ')[0] + ' תזכורת ' + (x.k === 1 ? 'ראשונה' : 'שנייה') + ' למלא את הטופס.')).catch(() => {}) } catch (e) { console.error('leadNudge', x.name, e.message) } }
+    for (const x of L) { try { await advisor.askApproval(x.phone, x.name, x.text, x.name.split(' ')[0] + ': תזכורת ' + (x.k === 1 ? 'ראשונה' : 'שנייה') + ' למלא את הטופס') /* 10.11.26: רק אחרי אישור של אביאל */ } catch (e) { console.error('leadNudge', x.name, e.message) } }
   } catch (e) { console.error('leadNudges', e.message) } }
 cron.schedule('15 * * * *', leadNudges, { timezone: 'Asia/Jerusalem' })
 // ── תשלום חודשי (1.11.26): 09:00 במועד — לאביאל מי משלם היום; 18:00 — הודעה למי שלא סומן "התקבל", ודיווח על מי שננעל (3 ימים בלי אישור) ──
@@ -922,12 +923,12 @@ const moDate = y => { const m = String(y || '').match(/^\d{4}-(\d{2})-(\d{2})$/)
 async function monthlyMorning() {
   if (!config.owner || !clientReady || ilNow().dow === 6) return
   try { const r = (await coachApi('dashboardMonthlyDue', [false])) || {}, L = (r.due || []).filter(x => x.late === 0); if (!L.length) return
-    await client.sendMessage(config.owner, toWhatsApp('תשלום חודשי היום:\n' + L.map(x => x.name + (x.price ? ', ' + x.price + ' ש"ח' : '')).join('\n') + '\nכשמגיע, מסמנים "התקבל" בכרטיס בלוח. מי שלא יסומן עד 18:00 יקבל ממני תזכורת.')).catch(() => {})
+    await client.sendMessage(config.owner, toWhatsApp('תשלום חודשי היום:\n' + L.map(x => x.name + (x.price ? ', ' + x.price + ' ש"ח' : '')).join('\n') + '\nכשמגיע, מסמנים "התקבל" בכרטיס בלוח. מי שלא יסומן עד 18:00, אכין לו תזכורת ואשלח רק אחרי שתאשר.')).catch(() => {})
   } catch (e) { console.error('monthlyMorning', e.message) } }
 async function monthlyEvening() {
   if (!config.owner || !clientReady || ilNow().dow === 6) return
   try { const r = (await coachApi('dashboardMonthlyDue', [true])) || {}
-    for (const x of (r.send || [])) { try { await drafts.sendToClient({ phone: x.phone, name: x.name, alias: x.name, chat_jid: '' }, x.text); await client.sendMessage(config.owner, toWhatsApp('שלחתי ל' + x.name.split(' ')[0] + ' תזכורת על התשלום החודשי.')).catch(() => {}) } catch (e) { console.error('monthlyNudge', x.name, e.message) } }
+    for (const x of (r.send || [])) { try { await advisor.askApproval(x.phone, x.name, x.text, x.name.split(' ')[0] + ': תזכורת תשלום חודשי') /* 10.11.26: רק אחרי אישור של אביאל */ } catch (e) { console.error('monthlyNudge', x.name, e.message) } }
     if ((r.locked || []).length) await client.sendMessage(config.owner, toWhatsApp('האפליקציה ננעלה (התשלום לא סומן 3 ימים):\n' + r.locked.map(x => x.name + ', מועד ' + moDate(x.due)).join('\n') + '\nכשמשלמים, "התקבל" בכרטיס פותח אותה מיד.')).catch(() => {})
   } catch (e) { console.error('monthlyEvening', e.message) } }
 cron.schedule('0 9 * * *', monthlyMorning, { timezone: 'Asia/Jerusalem' })
@@ -956,6 +957,9 @@ groupAgents.init({ client, config, toWhatsApp })
 setInterval(() => coachCmd.names(), 36e5)
 // ── סוכן בוקר 09:30 (א׳–ו׳): מה שמחכה לאישור בדשבורד, אחד-אחד בווטסאפ (morning-agent.js) ──
 const morningAgent = require('./morning-agent')
+const coordAgent = require('./coord-agent') // 6.11.26: אירוע / יום בלי מכון מהאפליקציה → 2 הצעות → "אשר שם 1"
+coordAgent.init({ coachApi: (fn, args) => coachApi(fn, args), askBrainOnce, stripEmoji: (x) => drafts.stripEmoji(x), ready: () => !!(config.owner && clientReady), send: (t) => client.sendMessage(updGid() || config.owner, toWhatsApp(drafts.stripEmoji(t).trim())).catch(() => {}) })
+cron.schedule('1-59/3 * * * *', () => coordAgent.scan().catch((e) => console.error('[coord]', e.message)), { timezone: 'Asia/Jerusalem' })
 morningAgent.init({ client, config, toWhatsApp, ready: () => clientReady })
 async function morningAgentDaily() { markRan('mornagent'); try { await morningAgent.daily() } catch (e) { console.error('[morning-agent]', e.message) } }
 cron.schedule('30 9 * * 0-5', morningAgentDaily, { timezone: 'Asia/Jerusalem' })
@@ -1244,6 +1248,7 @@ function onIncoming(msg) {
     // אישור טיוטה ללקוח: "שלח" (כתשובה להתראה) / "שלח 7" / "שלח 7: טקסט" / "בטל 7"
     // פקודות היועץ: "נסגר שם 990" / "לחשוב שם" / "לא מתאים שם" / "הוכחות שם לא"
     if (/^סיכום\s+\S+$/.test(String(text || '').trim()) && MEET_PENDING[String(text).trim().split(/\s+/)[1]]) { queue = queue.then(() => meetSend(text)).catch((e) => console.error('[meet]', e)); return } // שליחת סיכום פגישה
+    if (coordAgent.isReply(text)) { queue = queue.then(() => coordAgent.handleReply(text)).catch((e) => console.error('[coord]', e)); return } // 6.11.26 אישור הצעה לאירוע / יום בלי מכון
     if (/^(אשר|דחה)\s+\S/.test(String(text || '').trim()) && SWAP_PENDING[String(text).trim().split(/\s+/)[1].replace(/[:：].*$/, '')]) { queue = queue.then(() => swapDecide(text)).catch((e) => console.error('[swap]', e)); return } // בקשת החלפה בתפריט
     { const m = String(text || '').trim().match(/^תוספים\s+(.+)$/); if (m) { queue = queue.then(async () => { try { const r = await coachApi('dashboardBloodSuppSend', [m[1].trim()]); await client.sendMessage(config.owner, 'נשלח ל' + String(r.name).split(' ')[0] + ': ' + r.items.join(', ') + '. עם הקישורים מהמדריך, ונכנס לו/ה לויטמינים ותוספים באפליקציה') } catch (e) { await client.sendMessage(config.owner, 'לא נשלח: ' + e.message) } }).catch(() => {}); return } } // 5.11.26 תוספים לפי בדיקות דם
     if (/^שלח\s+\S/.test(String(text || '').trim()) && TECH_PENDING[String(text).trim().split(/\s+/)[1].replace(/[:：].*$/, '')]) { queue = queue.then(() => techReply(text)).catch((e) => console.error('[tech-reply]', e)); return } // תשובה לסרטון טכניקה
