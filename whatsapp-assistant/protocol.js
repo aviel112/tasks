@@ -9,11 +9,15 @@ const path = require('path')
 const drafts = require('./drafts')
 
 const DIR = __dirname
-const CFG_PATH = path.join(DIR, 'protocol-config.json')
+const CFG_PATH = process.env.PROTOCOL_CONFIG || path.join(DIR, 'protocol-config.json') // env: לבדיקות בלבד
 const LESSONS_PATH = process.env.PROTOCOL_LESSONS || path.join(DIR, 'protocol-lessons.json') // env: לבדיקות בלבד
 const FILES_DIR = path.join(DIR, 'protocol-files') // עותקים בשמות בעברית, כי הגשר שולח את שם הקובץ ככותרת המסמך
 const BRIDGE_SEND = 'http://127.0.0.1:8080/api/send'
 const LAST_DAY = 15
+// 11.11.26 מעקב: שורת שקילה בראש השיעור בימים 2-15, הודעת ערב בימים 2,4,6,9,11,13 (שאלה) ו-7,14 (סיכום שבוע), טופס משוב ביום 15.
+// הטקסטים של הערב יושבים ב-protocol-lessons.json (שדה evening), כדי שאפשר לערוך בלי לגעת בקוד.
+const WEIGH_LINE = 'לפני הכל: שקילה אחרי השירותים, ולרשום בגיליון.'
+const FEEDBACK_URL = 'https://aviel112.github.io/protocol/feedback.html'
 const log = (...a) => console.log('[protocol]', ...a)
 
 let ctx = {
@@ -28,7 +32,7 @@ let ctx = {
 // ── קבצים ──
 const readJson = (p, d) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return d } }
 const writeJson = (p, v) => { const tmp = p + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(v, null, 2)); fs.renameSync(tmp, p) }
-const DEFAULTS = { dryRun: true, sendTime: '08:00', lastSendHour: 21, welcomeFrom: 7, welcomeUntil: 23, skipShabbat: false, groupLink: '', emailWatch: false, emailPollMinutes: 15, autoStartOnPhoneMatch: true, price: 197, bonusDir: '', files: {} }
+const DEFAULTS = { dryRun: true, sendTime: '08:00', lastSendHour: 21, welcomeFrom: 7, welcomeUntil: 23, skipShabbat: false, groupLink: '', emailWatch: false, emailPollMinutes: 15, autoStartOnPhoneMatch: true, eveningTime: '20:30', eveningUntil: 22, price: 197, bonusDir: '', files: {} }
 const cfg = () => ({ ...DEFAULTS, ...readJson(CFG_PATH, {}) })
 const lessons = () => (readJson(LESSONS_PATH, { lessons: [] }).lessons || [])
 const isDry = () => process.env.PROTOCOL_DRY_RUN === '1' || cfg().dryRun !== false
@@ -108,9 +112,11 @@ function welcomeText(b, L, files, groupLink) {
   return out.join('\n')
 }
 function dayText(n, L, files) {
-  const out = [`*יום ${n}: ${L.title}*`, L.url, '', `*המשימה של היום:* ${L.task}`]
+  const out = []
+  if (n >= 2) out.push(WEIGH_LINE, '')
+  out.push(`*יום ${n}: ${L.title}*`, L.url, '', `*המשימה של היום:* ${L.task}`)
   if (files.length) out.push('', `מצרף את ${files.map((f) => f.label).join(' ואת ')}.`)
-  if (n === LAST_DAY) out.push('', 'זה היום האחרון. כל הכבוד על ההתמדה.')
+  if (n === LAST_DAY) out.push('', 'זה היום האחרון. כל הכבוד על ההתמדה.', '', 'ממש אשמח לשמוע איך היה לכם. שתי דקות, ועוזר לי מאוד לשפר:', FEEDBACK_URL)
   return out.join('\n')
 }
 
@@ -152,6 +158,21 @@ async function sendDay(st, b, n) {
   return 'sent'
 }
 
+// הודעת ערב ליום n של הקונה (שאלה או סיכום שבוע). מסמנים לפני השליחה: קריסה באמצע = לא שולחים שוב.
+async function sendEvening(st, b, n, text) {
+  b.evening = b.evening || {}
+  b.evening[n] = 'inflight'; save(st)
+  try { await deliver(b, text, []) } catch (e) {
+    delete b.evening[n]; save(st)
+    log('evening failed', b.phone, n, e.message)
+    return 'fail'
+  }
+  b.evening[n] = ctx.now().toISOString()
+  ;(b.history = b.history || []).push({ evening: n, at: b.evening[n], dry: isDry() || undefined })
+  save(st)
+  return 'sent'
+}
+
 // ── הלולאה: כל 2 דקות ──
 let running = false
 async function tick() {
@@ -159,7 +180,14 @@ async function tick() {
   running = true
   try {
     const st = load(), c = cfg(), t = ilNow()
+    const LS = lessons()
+    if (c.groupLink && inDayWindow()) await groupLinkPass(st) // קישור שנשמר בשעות שקט, או שליחה שנכשלה
     for (const b of Object.values(st.buyers)) {
+      // ערב: רק ביום שבו השיעור של היום הזה יצא היום (ציר הזמן של הקונה), בחלון 20:30-22:00. גם יום 14 של מי שסיים לא רלוונטי (15 בלי ערב).
+      if ((b.status === 'active' || b.status === 'done') && !b.inflight && b.day >= 1 && b.lastSent === t.day && !(b.evening || {})[b.day] && t.mins >= hm(c.eveningTime) && t.mins < c.eveningUntil * 60) {
+        const L = LS.find((x) => Number(x.day) === b.day)
+        if (L && String(L.evening || '').trim()) await sendEvening(st, b, b.day, L.evening)
+      }
       if (b.status !== 'active') continue
       if (b.inflight) { // נשאר מקריסה באמצע שליחה: מניחים שיצא, לא שולחים שוב
         b.day = b.inflight.day; b.lastSent = t.day; b.inflight = null; save(st)
@@ -169,9 +197,6 @@ async function tick() {
       if (b.day < 0) { // פרק הפתיחה: מיד, אבל לא באמצע הלילה
         if (t.mins >= c.welcomeFrom * 60 && t.mins < c.welcomeUntil * 60) await sendDay(st, b, 0)
         continue
-      }
-      if (c.groupLink && !b.groupSent) { // הקישור לקבוצה הגיע אחרי פרק הפתיחה
-        try { await deliver(b, `הקבוצה של הפרוטוקול, לשאלות ולעדכונים:\n${c.groupLink}`, []); b.groupSent = true; save(st) } catch (e) { log('group link failed', b.phone, e.message) }
       }
       // שיעור אחד ביום לכל היותר: בוקר שפוספס (המק ישן) נשלח מאוחר יותר באותו יום, ולא נערמים שני שיעורים
       if (b.day < LAST_DAY && b.lastSent < t.day && t.mins >= hm(c.sendTime) && t.mins < c.lastSendHour * 60 && !(c.skipShabbat && t.dow === 6)) await sendDay(st, b, b.day + 1)
@@ -245,6 +270,25 @@ async function onPayment(p) {
   return ctx.sendOwner(`תשלום על פרוטוקול הקיץ (ישראכרט) בלי טלפון במייל: ${who}.\n${hits.length ? 'יש כמה לידים בשם הזה' : 'לא מצאתי ליד בשם הזה'}, אז לא התחלתי.\nלהתחיל: פרוטוקול <טלפון> <שם>`)
 }
 
+// קישור הקבוצה: פעם אחת לכל קונה פעיל או שסיים (groupSent). נועלים את הלולאה כדי שלא ירוץ במקביל לשליחה.
+async function groupLinkPass(st) {
+  const link = cfg().groupLink
+  let sent = 0, failed = 0
+  for (const b of Object.values(st.buyers)) {
+      if (!link || b.groupSent || b.day < 0 || !(b.status === 'active' || b.status === 'done')) continue
+      b.groupSent = true; save(st) // מסמנים לפני: קריסה באמצע = לא שולחים שוב
+      try { await deliver(b, `הקבוצה של הפרוטוקול, לשאלות ולעדכונים:\n${link}`, []); sent++ } catch (e) { b.groupSent = false; save(st); failed++; log('group link failed', b.phone, e.message) }
+    }
+  return { sent, failed }
+}
+const inDayWindow = () => { const t = ilNow(), c = cfg(); return t.mins >= c.welcomeFrom * 60 && t.mins < c.welcomeUntil * 60 }
+async function sendGroupLink() {
+  if (!inDayWindow()) return { sent: 0, failed: 0, later: true } // שעות שקט: הלולאה תשלח בבוקר
+  while (running) await new Promise((r) => setTimeout(r, 200))
+  running = true
+  try { return await groupLinkPass(load()) } finally { running = false }
+}
+
 // ── פקודות בצ'אט של אביאל ──
 const CMD_RE = /^פרוטוקול(?:\s+(?:עזרה|מצב|עצור\s+.+|המשך\s+.+|אשר\s+.+|קבוצה\s+\S+|שיעור\s+\d{1,2}\s+\S+|בדוק מייל|[+\d][\d\s-]{8,}.*))?$/
 const isCommand = (text) => CMD_RE.test(String(text || '').trim())
@@ -267,7 +311,7 @@ function statusText() {
   const noLink = L.filter((x) => !String(x.url || '').trim()).map((x) => x.day)
   if (noLink.length) out.push('', `חסרים קישורים לשיעורים: ${noLink.length === 16 ? 'כולם (0-15)' : noLink.join(', ')}`)
   if (!c.groupLink) out.push('חסר קישור לקבוצה: פרוטוקול קבוצה <קישור>')
-  out.push(`שליחה כל בוקר ב-${c.sendTime}.`)
+  out.push(`שליחה כל בוקר ב-${c.sendTime}, הודעת ערב ב-${c.eveningTime} בימים 2, 4, 6, 7, 9, 11, 13, 14.`)
   return out.join('\n')
 }
 
@@ -295,7 +339,9 @@ async function handleCommand(text) {
   if ((m = t.match(/^פרוטוקול\s+קבוצה\s+(\S+)$/))) {
     if (!/^https?:\/\//.test(m[1])) return say('זה לא נראה כמו קישור. לדוגמה: פרוטוקול קבוצה https://chat.whatsapp.com/...')
     const c = readJson(CFG_PATH, {}); c.groupLink = m[1]; writeJson(CFG_PATH, c)
-    return say('שמרתי את הקישור לקבוצה. מי שכבר בפרוטוקול יקבל אותו בדקות הקרובות, והחדשים בפרק הפתיחה.')
+    const r = await sendGroupLink()
+    if (r.later) return say(`שמרתי את הקישור לקבוצה. עכשיו שעות שקט, אז הוא ייצא לקונים ב-${String(cfg().welcomeFrom).padStart(2, '0')}:00.`)
+    return say(`שמרתי את הקישור לקבוצה ושלחתי אותו ל-${r.sent} ${r.sent === 1 ? 'קונה' : 'קונים'}${isDry() ? ' (ניסיון, לא נשלח בפועל)' : ''}.${r.failed ? ` ל-${r.failed} זה נכשל, אנסה שוב בפקודה הבאה.` : ''} מי שעוד מחכה לפרק הפתיחה יקבל אותו שם.`)
   }
   if ((m = t.match(/^פרוטוקול\s+שיעור\s+(\d{1,2})\s+(\S+)$/))) {
     const n = Number(m[1])
@@ -333,4 +379,4 @@ function install(c) {
   log('installed', isDry() ? '(dry run)' : '(live)')
 }
 
-module.exports = { install, isCommand, handleCommand, tick, enroll, pollEmail, onPayment, statusText, normPhone, sameName, _setCtx: (c) => { ctx = { ...ctx, ...c } }, _statePath: statePath }
+module.exports = { install, isCommand, handleCommand, tick, enroll, sendGroupLink, pollEmail, onPayment, statusText, normPhone, sameName, _setCtx: (c) => { ctx = { ...ctx, ...c } }, _statePath: statePath }

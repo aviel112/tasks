@@ -1,25 +1,57 @@
 {
   "_note": "פרוטוקול הקיץ (protocol.js). dryRun=true: שום דבר לא נשלח לקונים, רק נרשם בלוג ובקובץ protocol-state.dry.json. להפעלה: dryRun=false, groupLink, ואז הפעלה מחדש של העוזרת.",
-  "dryRun": true,
+  "dryRun": false,
   "sendTime": "08:00",
   "lastSendHour": 21,
   "welcomeFrom": 7,
   "welcomeUntil": 23,
   "skipShabbat": false,
   "groupLink": "",
-  "emailWatch": false,
+  "emailWatch": true,
   "emailPollMinutes": 15,
   "autoStartOnPhoneMatch": true,
   "price": 197,
   "bonusDir": "/Users/user/Desktop/פרוטוקול הקיץ - תסריטי הקלטה/bonuses",
   "files": {
-    "sheet": { "src": "tracking-sheet.xlsx", "name": "גיליון מעקב - פרוטוקול הקיץ.xlsx", "label": "גיליון המעקב" },
-    "progress": { "src": "guide-progress-tracking.pdf", "name": "מדריך מעקב התקדמות.pdf", "label": "מדריך מעקב ההתקדמות" },
-    "cart": { "src": "guide-winning-cart.pdf", "name": "המדריך לעגלה מנצחת.pdf", "label": "המדריך לעגלה מנצחת, רשימת הקניות של הפרוטוקול" },
-    "protein": { "src": "protein-50-shades.pdf", "name": "50 גוונים של חלבון.pdf", "label": "50 גוונים של חלבון" },
-    "friday": { "src": "bonus-friday-alcohol.pdf", "name": "מדריך שישי ואלכוהול.pdf", "label": "מדריך שישי ואלכוהול" },
-    "alcohol": { "src": "guide-alcohol-nights.pdf", "name": "המדריך לאלכוהול ויציאות.pdf", "label": "המדריך לאלכוהול ויציאות" },
-    "dayafter": { "src": "bonus-day-after.pdf", "name": "מדריך היום שאחרי.pdf", "label": "מדריך היום שאחרי" },
-    "vacation": { "src": "bonus-vacation.pdf", "name": "מדריך חופשה.pdf", "label": "מדריך החופשה" }
+    "sheet": {
+      "src": "tracking-sheet.xlsx",
+      "name": "גיליון מעקב - פרוטוקול הקיץ.xlsx",
+      "label": "גיליון המעקב"
+    },
+    "progress": {
+      "src": "guide-progress-tracking.pdf",
+      "name": "מדריך מעקב התקדמות.pdf",
+      "label": "מדריך מעקב ההתקדמות"
+    },
+    "cart": {
+      "src": "guide-winning-cart.pdf",
+      "name": "המדריך לעגלה מנצחת.pdf",
+      "label": "המדריך לעגלה מנצחת, רשימת הקניות של הפרוטוקול"
+    },
+    "protein": {
+      "src": "protein-50-shades.pdf",
+      "name": "50 גוונים של חלבון.pdf",
+      "label": "50 גוונים של חלבון"
+    },
+    "friday": {
+      "src": "bonus-friday-alcohol.pdf",
+      "name": "מדריך שישי ואלכוהול.pdf",
+      "label": "מדריך שישי ואלכוהול"
+    },
+    "alcohol": {
+      "src": "guide-alcohol-nights.pdf",
+      "name": "המדריך לאלכוהול ויציאות.pdf",
+      "label": "המדריך לאלכוהול ויציאות"
+    },
+    "dayafter": {
+      "src": "bonus-day-after.pdf",
+      "name": "מדריך היום שאחרי.pdf",
+      "label": "מדריך היום שאחרי"
+    },
+    "vacation": {
+      "src": "bonus-vacation.pdf",
+      "name": "מדריך חופשה.pdf",
+      "label": "מדריך החופשה"
+    }
   }
 }
