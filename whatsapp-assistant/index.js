@@ -1,5 +1,5 @@
 // העוזרת האישית של אביאל — בוט ווטסאפ שמחובר ל-Claude ולמערכות העסק
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
+const { Client, LocalAuth, MessageMedia, Poll } = require('whatsapp-web.js')
 const qrcode = require('qrcode')
 const cron = require('node-cron')
 const fs = require('fs')
@@ -69,8 +69,13 @@ function toWhatsApp(text) {
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(ROOT, '.wwebjs_auth') }),
   puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] },
+  webVersion: '2.3000.1055156383', webVersionCache: { type: 'local', path: path.join(ROOT, '.wwebjs_cache'), strict: true }, // 18.11.26: גרסת ווטסאפ ווב החדשה נתקעת אחרי authenticated
 })
-{ const _send = client.sendMessage.bind(client); client.sendMessage = (to, ...r) => _send(to === config.owner && UPD_UNTIL > Date.now() && updGid() ? updGid() : to, ...r) } // 5.11.26 מענה בקבוצת העדכונים
+const routes = require('./routes') // 19.11.26: פיצול ההודעות לאביאל ל-3 קבוצות (מתאמנים / עסק / אישי)
+let ROUTE_REPLY = { gid: '', until: 0 } // אחרי הודעה של אביאל בקבוצה: 3 דקות שבהן המענה חוזר לאותה קבוצה
+{ const _send = client.sendMessage.bind(client); client.sendMessage = (to, ...r) => { let dest = to
+    try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); dest = routes.gidFor(routes.classify(txt)) || to } } } catch (e) { dest = to }
+    return _send(dest, ...r).catch((e) => { if (dest !== to) { console.error('[routes] group send failed, falling back', e.message); return _send(to, ...r) } throw e }) } } // 5.11.26 מענה בקבוצת העדכונים
 
 // ── פעולות אמיתיות שהמוח מבקש בפורמט מובנה (לא קוד חופשי) ──
 const REM_PATH = path.join(ROOT, 'reminders.json')
@@ -333,6 +338,36 @@ let consecutiveSendFailures = 0
 // כשלון שליחה לפני ש-WhatsApp מחובר הוא לא תקיעה — אחרת ה-watchdog מפיל את התהליך בלולאה וה-QR לא נשאר על המסך
 let clientReady = false
 
+// קבוצת הדירות עם אמא — הדוחות נשלחים אליה, וכל מה שנכתב בה נרשם לקובץ כדי שקלוד יקרא את הפידבק (16.11.26)
+const APT_GROUP_NAME = 'דירה עד יולי'
+const APT_FEEDBACK_PATH = path.join(ROOT, '..', 'rishon-deals', 'group-feedback.jsonl')
+// getChats() קורס בחשבון הזה ("r") ומפיל את התהליך — מזהים את הקבוצה מהודעה שנכתבת בה ושומרים לקובץ
+const APT_GID_PATH = path.join(ROOT, 'apartment-group.json')
+let aptGid = null
+try { aptGid = JSON.parse(fs.readFileSync(APT_GID_PATH, 'utf8')).gid || null } catch (_) {}
+async function resolveAptGroup() { return aptGid }
+function aptGroupAdopt(msg, cid) {
+  console.log('[apartment] group msg seen', cid)
+  msg.getChat().then((c) => {
+    console.log('[apartment] group name', JSON.stringify((c && c.name) || ''))
+    if (aptGid || String((c && c.name) || '').trim() !== APT_GROUP_NAME) return
+    aptGid = cid
+    fs.writeFileSync(APT_GID_PATH, JSON.stringify({ gid: cid, at: new Date().toISOString() }))
+    console.log('[apartment] group adopted', cid)
+    logAptFeedback(msg)
+  }).catch((e) => {
+    console.error('[apartment] getChat failed', e && e.message)
+    if (String(msg.body || '').trim() === 'בדיקה' && (msg.fromMe || msg.author === config.owner)) { aptGid = cid; fs.writeFileSync(APT_GID_PATH, JSON.stringify({ gid: cid, at: new Date().toISOString(), via: 'בדיקה' })); console.log('[apartment] group adopted via בדיקה', cid) }
+  })
+}
+function logAptFeedback(msg) {
+  try {
+    const row = { ts: new Date((msg.timestamp || Date.now() / 1000) * 1000).toISOString(), fromMe: !!msg.fromMe, author: msg.author || msg.from, type: msg.type, body: String(msg.body || '').slice(0, 2000) }
+    if (row.fromMe && row.body.startsWith('🏠')) return // הדוחות שלנו
+    fs.appendFileSync(APT_FEEDBACK_PATH, JSON.stringify(row) + '\n')
+  } catch (e) { console.error('[apartment] feedback log', e.message) }
+}
+
 function checkApartmentReport() {
   if (!config.owner || !clientReady) return
   let data = null
@@ -341,10 +376,25 @@ function checkApartmentReport() {
     return
   }
   if (!data || !data.report) return
-  client
-    .sendMessage(config.owner, toWhatsApp('🏠 *דוח דירות יומי*\n\n' + data.report))
-    .then(() => {
-      fs.unlinkSync(APARTMENT_REPORT_PATH)
+  if (data.sendAt && Date.now() < Date.parse(data.sendAt)) return // מתוזמן — עוד לא הגיע הזמן
+  // 16.11.26: to:"group" → לקבוצת "דירה עד יולי" (אביאל + אמא), לא לאביאל
+  const destP = data.to === 'group' ? resolveAptGroup() : Promise.resolve(config.owner)
+  destP
+    .then((dest) => { if (!dest) { console.log('[apartment] group not known yet — report kept'); return 'skip' } return client.sendMessage(dest, toWhatsApp('🏠 *דירות לאמא*\n\n' + data.report)).then(async () => {
+      // סקר אחרי הדוח: {question, options[]} — ההצבעות נרשמות ל-group-feedback.jsonl (vote_update)
+      // הדוח כבר יצא — מוחקים מיד, שכשל בסקר לא יגרום לשליחה כפולה לקבוצה של אמא
+      try { fs.unlinkSync(APARTMENT_REPORT_PATH) } catch (_) {}
+      try {
+        if (data.poll && Array.isArray(data.poll.options) && data.poll.options.length >= 2) {
+          const pm = await client.sendMessage(dest, new Poll(data.poll.question, data.poll.options.slice(0, 12), { allowMultipleAnswers: true }))
+          fs.appendFileSync(APT_FEEDBACK_PATH, JSON.stringify({ ts: new Date().toISOString(), type: 'poll_sent', question: data.poll.question, options: data.poll.options, msgId: pm && pm.id && pm.id._serialized }) + '\n')
+        }
+        if (data.followup) await client.sendMessage(dest, toWhatsApp(data.followup))
+      } catch (e) { console.error('[apartment] poll/followup failed (report already sent)', e.message) }
+    }) })
+    .then((r) => {
+      if (r === 'skip') return
+      try { fs.unlinkSync(APARTMENT_REPORT_PATH) } catch (_) {}
       console.log('[apartment] report sent and cleared, date:', data.date)
       consecutiveSendFailures = 0
     })
@@ -357,7 +407,18 @@ function checkApartmentReport() {
       }
     })
 }
-setInterval(checkApartmentReport, 10 * 60 * 1000)
+setInterval(checkApartmentReport, 2 * 60 * 1000)
+client.on('vote_update', (vote) => {
+  try {
+    const pm = vote.parentMessage
+    const key = vote.parentMsgKey || {}
+    const chatId = (pm && (pm.fromMe ? pm.to : pm.from)) || key.remote || (key._serialized || '').split('_')[1]
+    console.log('[apartment] vote_update seen chat=', chatId, 'aptGid=', aptGid, 'hasParent=', !!pm)
+    if (!aptGid || chatId !== aptGid) return
+    fs.appendFileSync(APT_FEEDBACK_PATH, JSON.stringify({ ts: new Date().toISOString(), type: 'vote', voter: vote.voter, question: pm ? (pm.pollName || pm.body || '') : '', selected: (vote.selectedOptions || []).map((o) => o.name) }) + '\n')
+    console.log('[apartment] vote', (vote.selectedOptions || []).length)
+  } catch (e) { console.error('[apartment] vote log', e.message) }
+})
 setTimeout(checkApartmentReport, 60 * 1000) // ריצה ראשונה קצת אחרי העלייה
 
 // ── ווטסאפ עסקי: ליד חם מיידי · מחכה שעה (10–22) · דחוף מיידי — כל התראה עם טיוטה ממוספרת לאישור ──
@@ -389,7 +450,7 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   const streak = recent.slice(recent.map((l) => l.startsWith('אביאל:')).lastIndexOf(true) + 1).map((l) => l.replace(/^הוא\/היא:\s*/, '')).filter(Boolean)
   const saidFull = (streak.length ? streak.join('\n') : String(who.content || '')).trim().slice(0, 500)
   const said = saidFull.replace(/\s+/g, ' ').slice(0, 160)
-  const id = parsed ? drafts.add({ chat_jid: who.chat_jid, phone: who.phone, name, alias: heb, text: parsed.draft, alt: parsed.alt, clientText: saidFull, risk: parsed.risk }) : null
+  const id = parsed ? drafts.add({ chat_jid: who.chat_jid, phone: who.phone, name, alias: heb, text: parsed.draft, alt: parsed.alt, alt2: parsed.alt2 || '', clientText: saidFull, risk: parsed.risk }) : null
   // שגרתי → נכנס לסבב הבא (12/16/20) במקום להקפיץ עכשיו
   if (id && batchable && parsed.risk === 'low') {
     drafts.setBatch(id, { shown, said })
@@ -398,7 +459,7 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   const quoteBlock = saidFull ? saidFull.split('\n').map((l) => '> ' + l).join('\n') : ''
   const head = headline ? `*${shown}* ${headline}` : `*${shown}* כתב${parsed && parsed.risk === 'low' ? ' (שגרתי)' : parsed ? ' (לבדוק)' : ''}:`
   const lines = parsed
-    ? [head, quoteBlock, '', parsed.alt ? '*1.*' : '*התשובה שאשלח:*', parsed.draft, ...(parsed.alt ? ['', '*2.*', parsed.alt] : []), '', drafts.approvalHint(id, heb || name, !!parsed.alt)]
+    ? [head, quoteBlock, '', parsed.alt ? '*1.*' : '*התשובה שאשלח:*', parsed.draft, ...(parsed.alt ? ['', '*2.*', parsed.alt] : []), ...(parsed.alt2 ? ['', '*3.*', parsed.alt2] : []), '', drafts.approvalHint(id, heb || name, !!parsed.alt, !!parsed.alt2)]
     : [head, quoteBlock, '', drafts.stripEmoji(answer)]
   let sent; try { sent = await client.sendMessage(config.owner, toWhatsApp(lines.join('\n'))) } catch (e) { if (id) drafts.remove(id); throw e } // בלי התראה אין טיוטה (אחרת היא חוסמת את הלקוח 36 שעות)
   if (id && sent?.id?._serialized) drafts.setAlertMsgId(id, sent.id._serialized)
@@ -416,10 +477,10 @@ async function flushBatch() {
     const it = drafts.get(i)
     const k = String(it.alias || it.name).split(/\s+/)[0]
     const said = String(it.clientText || it.batch.said || '').split('\n').map((l) => '> ' + l).join('\n')
-    return `*${it.batch.shown || it.name}* כתב:\n${said}\n*1 ${k}:* ${it.text.replace(/\n/g, ' / ')}` + (it.alt ? `\n*2 ${k}:* ${it.alt.replace(/\n/g, ' / ')}` : '')
+    return `*${it.batch.shown || it.name}* כתב:\n${said}\n*1 ${k}:* ${it.text.replace(/\n/g, ' / ')}` + (it.alt ? `\n*2 ${k}:* ${it.alt.replace(/\n/g, ' / ')}` : '') + (it.alt2 ? `\n*3 ${k}:* ${it.alt2.replace(/\n/g, ' / ')}` : '')
   })
   const names = ids.map((i) => String(drafts.get(i).alias || drafts.get(i).name).split(/\s+/)[0])
-  const msg = [`*סבב תשובות* (${ids.length})`, '', blocks.join('\n\n'), '', `לבחור לכל אחד: "1 ${names[0]}" או "2 ${names[0]}", כמה ביחד בפסיקים${names[1] ? ` (למשל: 1 ${names[0]}, 2 ${names[1]})` : ''} · "לא" עם שם = לא שולחת`].join('\n')
+  const msg = [`*סבב תשובות* (${ids.length})`, '', blocks.join('\n\n'), '', `לבחור לכל אחד: "1 ${names[0]}", "2 ${names[0]}" או "3 ${names[0]}", כמה ביחד בפסיקים${names[1] ? ` (למשל: 1 ${names[0]}, 2 ${names[1]})` : ''} · "לא" עם שם = לא שולחת`].join('\n')
   const sent = await client.sendMessage(config.owner, toWhatsApp(msg)).catch(() => null)
   if (!sent) { console.error('[batch] send failed — kept for next round'); return }
   for (const i of ids) drafts.clearBatch(i, null) // הודעת סבב מכילה כמה — מאשרים לפי שם, לא לפי ציטוט
@@ -873,7 +934,8 @@ let UPD_UNTIL = 0 // אחרי הודעה של אביאל בקבוצת העדכו
 function updShort(a) { const L = String(a.body || '').split('\n').map((x) => x.trim()).filter(Boolean), out = []; let sum = L[0] || ''; const dot = sum.search(/[.!?](\s|$)/); if (dot > 0 && dot < 160) sum = sum.slice(0, dot + 1); else if (sum.length > 160) sum = sum.slice(0, 157) + '...'
   out.push(sum); L.slice(1).forEach((x) => { if (/^\d\./.test(x)) { if (out.filter((y) => /^\d\./.test(y)).length < 3) out.push(x.length > 110 ? x.slice(0, 107) + '...' : x) } else if (/^(מחוץ לטווח|חולשות|כל הערכים)/.test(x)) out.push(x.length > 140 ? x.slice(0, 137) + '...' : x) })
   return '*' + a.title + '*\n' + out.join('\n') }
-function updGid() { try { return JSON.parse(fs.readFileSync(UPD_PATH, 'utf8')).gid || '' } catch { return '' } }
+const UPD_GROUP_ON = false // 16.11.26 אביאל: הכל בצ'אט עם העוזרת, לא בקבוצת עדכונים
+function updGid() { if (!UPD_GROUP_ON) return ''; try { return JSON.parse(fs.readFileSync(UPD_PATH, 'utf8')).gid || '' } catch { return '' } }
 async function updGroupAdopt(msg, cid) {
   const g = updGid(); if (g) return cid === g
   let nm = ''; try { nm = await client.pupPage.evaluate((id) => { const c = window.Store && window.Store.Chat && window.Store.Chat.get(id); return c ? String(c.formattedTitle || c.name || (c.groupMetadata && c.groupMetadata.subject) || '') : '' }, cid) } catch {}
@@ -886,10 +948,22 @@ async function coachAlertsPull() {
   try {
     const r = await fetch('https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec', { method: 'POST', body: JSON.stringify({ api: 'coach', k: 'c7dfe880cf024fc59fcc9a8a', fn: 'dashboardCoachAlerts', args: [] }) })
     const j = await r.json(), q = (j && j.ok && Array.isArray(j.r)) ? j.r : []
-    for (const a of q) { if (a.kind === 'tech' && a.name && a.reply) TECH_PENDING[String(a.name).split(' ')[0]] = { name: a.name, reply: a.reply, at: Date.now() }; if (a.kind === 'swap' && a.name && a.id) SWAP_PENDING[String(a.name).split(' ')[0]] = { name: a.name, id: a.id, at: Date.now() }; if (a.kind === 'meet' && a.name && a.text) MEET_PENDING[String(a.name).split(' ')[0]] = { name: a.name, text: a.text, at: Date.now() }; await client.sendMessage(a.kind === 'upd' && updGid() ? updGid() : config.owner, toWhatsApp(drafts.stripEmoji(a.kind === 'upd' ? updShort(a) : '*' + a.title + '*\n' + (a.body || '')).trim())).catch(() => {}) }
+    for (const a of q) { if (a.kind === 'tech' && a.name && a.reply) TECH_PENDING[String(a.name).split(' ')[0]] = { name: a.name, reply: a.reply, at: Date.now() }; if (a.kind === 'swap' && a.name && a.id) SWAP_PENDING[String(a.name).split(' ')[0]] = { name: a.name, id: a.id, at: Date.now() }; if (a.kind === 'meet' && a.name && a.text) MEET_PENDING[String(a.name).split(' ')[0]] = { name: a.name, text: a.text, at: Date.now() }; const sentA = await client.sendMessage(a.kind === 'upd' && updGid() ? updGid() : config.owner, toWhatsApp(drafts.stripEmoji(a.kind === 'upd' ? updShort(a) : '*' + a.title + '*\n' + (a.body || '')).trim())).catch(() => null); if ((a.kind === 'blood' || a.kind === 'brain') && a.name) { try { bloodGate.remember(sentA, a.name, a.kind, a.opts) } catch (e) {} } }
   } catch (e) { console.error('coachAlertsPull', e.message) }
 }
 cron.schedule('*/2 * * * *', coachAlertsPull, { timezone: 'Asia/Jerusalem' })
+// 18.11.26 (אביאל): כל צילום ארוחה של מתאמן → אליו בוואטסאפ (תמונה + פענוח); תשובה עם תיקון → היומן מתעדכן והמתאמן מקבל הודעה
+const mealRelay = require('./meal-relay')({ client, MessageMedia, config, coachApi, toWhatsApp, drafts, askBrainOnce, ready: () => clientReady })
+cron.schedule('* * * * *', () => mealRelay.pull(), { timezone: 'Asia/Jerusalem' })
+// 18.11.26 (אביאל): שומר תקלות לילי — סורק את יומני האוכל של כולם ומתריע רק אם יש רישום כפול או יום לא הגיוני
+const diaryWatch = require('./diary-watch')({ client, config, coachApi, toWhatsApp, ready: () => clientReady })
+cron.schedule('30 22 * * *', () => diaryWatch.run(), { timezone: 'Asia/Jerusalem' })
+// 19.11.26 (אביאל): ניתוח בדיקות דם מחכה ל"כן" שלו לפני שהמתאמן רואה; "מי בלי בדיקות" = רשימה
+const bloodGate = require('./blood-gate')({ client, config, coachApi, toWhatsApp, ready: () => clientReady })
+cron.schedule('10 9-21 * * *', () => bloodGate.remind(), { timezone: 'Asia/Jerusalem' }) // 20.11.26: תזכורת אחת על אישור שמחכה יותר מיום
+// 20.11.26 (אביאל): 12 שבועות על אותה תוכנית → 3 הצעות לשינוי לפי המתאמן/ת, פעם אחת לכל תוכנית
+const progRefresh = require('./prog-refresh')({ client, config, coachApi, toWhatsApp, askBrainOnce, remember: (sent, entry) => bloodGate.rememberAny(sent, entry), stripEmoji: (t) => drafts.stripEmoji(t), ready: () => clientReady })
+cron.schedule('30 9 * * *', () => progRefresh.run(), { timezone: 'Asia/Jerusalem' })
 // ── שבועי (ראשון 10:00, 1.11.26 אביאל): מי קיבל את האפליקציה ומי נכנס, תקלות מהשבוע, ו-3-5 רעיונות לשיפור ──
 async function coachApi(fn, args) { const r = await fetch('https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec', { method: 'POST', body: JSON.stringify({ api: 'coach', k: 'c7dfe880cf024fc59fcc9a8a', fn, args: args || [] }) }); const j = await r.json(); if (!j.ok) throw new Error(j.error || 'שגיאה'); return j.r }
 async function weeklyAppIdeas() {
@@ -903,6 +977,140 @@ async function weeklyAppIdeas() {
   } catch (e) { console.error('weeklyAppIdeas', e.message) }
 }
 cron.schedule('0 10 * * 0', weeklyAppIdeas, { timezone: 'Asia/Jerusalem' })
+// ── קצב משקל שבועי (13.11.26, אביאל): כל ראשון 08:20, מי מחוץ לקצב לפי הממוצע השבועי מול היעד שהוגדר לו/ה. כלל: בקצב = חצי מהיעד עד פי 1.5 ──
+function paceMsg(P) {
+  const off = [], miss = [], ok = []
+  Object.keys(P || {}).forEach((n) => { const p = P[n]; if (!p || typeof p !== 'object' || p.family || p.err || !p.note || (config.alertMute || []).includes(n)) return
+    const first = n.split(' ')[0]
+    if (p.icon === '⚪') return
+    if (p.icon === '⚠️') miss.push(first)
+    else if (p.icon === '✅') ok.push(first)
+    else if (!/יעד|שמירה/.test(String(p.note))) return /* בלי יעד קצב בלוח אי אפשר לשפוט */
+    else off.push(first + ': ' + String(p.note).replace(/\u200e/g, '').replace(/ · נשקל רק.*$/, '')) })
+  if (!off.length && !miss.length) return ''
+  return ('*קצב משקל השבוע*\n' + (off.length ? 'מחוץ לקצב:\n' + off.join('\n') + '\n' : '') + (miss.length ? 'לא נשקלו: ' + miss.join(', ') + '\n' : '') + 'בקצב: ' + ok.length + '. הפירוט בלוח, בכרטיס "מגמה לפי היעד".').trim()
+}
+async function paceReport() {
+  if (!config.owner || !clientReady) return; markRan('pace')
+  try { const msg = paceMsg(await coachApi('dashboardPulse')); if (msg) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(msg))).catch(() => {}) } catch (e) { console.error('paceReport', e.message) }
+}
+cron.schedule('20 8 * * 0', paceReport, { timezone: 'Asia/Jerusalem' })
+// ── מתאמן שלא מתאמן (16.11.26, אביאל): כל בוקר 10:05. סף ימים בלי אימון לפי מספר האימונים בתוכנית: 3 בשבוע = 3 ימים, 5 בשבוע = 2 ימים ──
+const TRAIN_GAP_PATH = path.join(ROOT, 'train-gap-state.json')
+const APP_EXEC = 'https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec'
+function trainGapLimit(n) { return Math.min(5, Math.floor(7 / Math.max(1, n)) + 1) } // 5→2, 4→2, 3→3, 2→4, 1→5
+function ilDay(d) { return new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }) }
+async function trainGapFind(api, planOf, today) {
+  const out = [], P = await api('dashboardPulse'), L = ((await api('dashboardList')) || {}).clients || []
+  for (const c of L) {
+    const p = (P || {})[c.name]
+    if (!p || typeof p !== 'object' || p.family || c.status !== 'פעיל' || (config.alertMute || []).includes(c.name)) continue
+    const card = await api('dashboardClientCard', [c.name]).catch(() => null); if (!card || !card.token) continue
+    const pl = await planOf(card.token).catch(() => null); if (!pl) continue
+    const days = ((pl.program && pl.program.blocks) || []).filter((b) => b.ex && b.ex.length).length
+    if (!days || pl.noProg) continue
+    let last = ''
+    Object.values(pl.lifts || {}).forEach((v) => (v.hist || []).forEach((h) => { if (h.d && h.d > last) last = h.d }))
+    const base = last || String(c.start || '').slice(0, 10); if (!base) continue
+    const since = Math.round((Date.parse(today) - Date.parse(base)) / 864e5), missed = since - 1 // ימים מלאים בלי אימון (אתמול ואחורה)
+    const lim = trainGapLimit(days)
+    if (!last && since < lim + 2) continue // התחיל לא מזמן ועוד לא התאמן: נותנים יומיים נוספים
+    if (missed >= lim) out.push({ name: c.name, days, lim, missed, last, never: !last })
+  }
+  return out
+}
+async function trainGapReport(dry) {
+  if (!dry && (!config.owner || !clientReady)) return; if (!dry) markRan('traingap')
+  try {
+    const today = ilDay(Date.now())
+    const hits = await trainGapFind(coachApi, async (t) => { const r = await fetch(APP_EXEC + '?api=plan&t=' + encodeURIComponent(t)); const j = await r.json(); return j && j.ok ? j.r : null }, today)
+    let st = {}; try { st = JSON.parse(fs.readFileSync(TRAIN_GAP_PATH, 'utf8')) } catch {}
+    const fresh = hits.filter((h) => { const k = st[h.name]; return !k || k.last !== h.last || Date.now() - Date.parse(k.at) > 5 * 864e5 })
+    if (dry) return { hits, fresh }
+    if (!fresh.length) return
+    const lines = fresh.map((h) => h.name.split(' ')[0] + ': ' + (h.never ? 'עוד לא התאמן/ה' : h.missed + ' ימים בלי אימון, אימון אחרון ' + h.last.slice(8, 10) + '/' + h.last.slice(5, 7)) + ' (בתוכנית ' + h.days + ' בשבוע)')
+    await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji('*לא התאמנו*\n' + lines.join('\n') + '\nהודעה מוכנה בכרטיס של כל אחד בלוח.'))).catch(() => {})
+    fresh.forEach((h) => { st[h.name] = { last: h.last, at: new Date().toISOString() } }); fs.writeFileSync(TRAIN_GAP_PATH, JSON.stringify(st))
+  } catch (e) { console.error('trainGapReport', e.message) }
+}
+cron.schedule('5 10 * * *', () => trainGapReport(), { timezone: 'Asia/Jerusalem' })
+
+// 16.11.26: פגישה חודשית עם כל מתאמן. בבוקר של הפגישה (ויומיים לפניה) תזכורת לאביאל; אם עברה בלי שנרשמה, תזכורת אחת נוספת
+const MEET_DUE_PATH = path.join(__dirname, 'meet-due-state.json')
+async function meetDueFind(today) {
+  const P = (await coachApi('dashboardPulse')) || {}, L = ((await coachApi('dashboardList')) || {}).clients || [], out = []
+  for (const c of L) {
+    const p = P[c.name]; if (c.status !== 'פעיל' || !c.nextMeeting || (p && p.family)) continue
+    const d = Math.round((Date.parse(c.nextMeeting) - Date.parse(today)) / 864e5)
+    if (d >= -3 && d <= 2) out.push({ name: c.name, date: c.nextMeeting, d, time: c.meetingTime || '' })
+  }
+  return out.sort((a, b) => a.d - b.d)
+}
+async function meetDueReport(dry) {
+  if (!dry && (!config.owner || !clientReady)) return; if (!dry) markRan('meetdue')
+  try {
+    const hits = await meetDueFind(ilDay(Date.now()))
+    let st = {}; try { st = JSON.parse(fs.readFileSync(MEET_DUE_PATH, 'utf8')) } catch {}
+    const key = (h) => h.name + '|' + h.date + '|' + (h.d > 0 ? 'soon' : h.d === 0 ? 'today' : 'late')
+    const fresh = hits.filter((h) => !st[key(h)])
+    if (dry) return { hits, fresh }
+    if (!fresh.length) return
+    const when = (h) => h.d === 0 ? 'היום' : h.d === 1 ? 'מחר' : h.d > 0 ? 'ב-' + h.date.slice(8, 10) + '/' + h.date.slice(5, 7) : 'הייתה ב-' + h.date.slice(8, 10) + '/' + h.date.slice(5, 7) + ' ולא נרשמה'
+    const lines = fresh.map((h) => h.name + ': ' + when(h) + (h.time && h.d >= 0 ? ' ב-' + h.time : ''))
+    await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji('*פגישות חודשיות*\n' + lines.join('\n')))).catch(() => {})
+    fresh.forEach((h) => { st[key(h)] = new Date().toISOString() }); fs.writeFileSync(MEET_DUE_PATH, JSON.stringify(st))
+  } catch (e) { console.error('meetDueReport', e.message) }
+}
+cron.schedule('20 9 * * *', () => meetDueReport(), { timezone: 'Asia/Jerusalem' })
+// ── בדיקות דם בצ'אט (16.11.26, אביאל): שולחים לעוזרת קובץ/תמונה, היא מזהה את המתאמן/ת, מעלה לכרטיס, מנתחת ומחזירה סיכום ותוספים. "תוספים [שם]" שולח למתאמן ומעדכן את האפליקציה ──
+let BLOOD_WAIT = null // קובץ שמחכה לשם: { file, mime, fname, at }
+const BLOOD_RE = /דם|blood|\blab\b|בדיקות/i
+function bloodCandidate(msg, caption) {
+  const d = msg._data || {}, fname = String(d.filename || ''), mt = String(d.mimetype || '')
+  if (msg.type === 'document') return /pdf|image/i.test(mt) || /\.(pdf|jpe?g|png)$/i.test(fname)
+  return msg.type === 'image' && (BLOOD_RE.test(caption || ''))
+}
+async function bloodClients() { const L = ((await coachApi('dashboardList')) || {}).clients || []; return L.filter((c) => c.name) }
+function bloodPickName(text, clients) { // שם מלא או שם פרטי יחיד בטקסט
+  const t = String(text || ''); if (!t.trim()) return ''
+  const full = clients.filter((c) => t.includes(c.name)); if (full.length === 1) return full[0].name
+  const first = clients.filter((c) => new RegExp('(^|[^א-ת])' + c.name.split(' ')[0] + '([^א-ת]|$)').test(t)); return first.length === 1 ? first[0].name : ''
+}
+async function bloodProcess(name, file, mime, fname) {
+  const b64 = fs.readFileSync(file).toString('base64')
+  const r = await coachApi('dashboardBloodUpload', [name, 'data:' + mime + ';base64,' + b64, mime, fname || ''])
+  const first = name.split(' ')[0], txt = r && (r.text || r.summary || r.body) ? String(r.text || r.summary || r.body).trim() : ''
+  if (!txt) return 'הקובץ נשמר בתיקייה של ' + first + ', אבל לא הצלחתי לקרוא ממנו ערכים. אפשר להקליד אותם בכרטיס בלוח.'
+  return '*בדיקות דם: ' + first + '*\n' + txt + '\n\nלשליחה ל' + first + ' ועדכון האפליקציה: תוספים ' + first
+}
+async function bloodFromChat(msg, caption) {
+  let file = ''
+  try {
+    const media = await msg.downloadMedia(); if (!media || !media.data) return
+    const ext = /pdf/i.test(media.mimetype || '') ? 'pdf' : /png/i.test(media.mimetype || '') ? 'png' : 'jpg', mime = ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : 'image/jpeg'
+    file = path.join(PHOTOS_DIR, 'blood-' + Date.now() + '.' + ext); fs.writeFileSync(file, Buffer.from(media.data, 'base64'))
+    const clients = await bloodClients(), fname = String((msg._data || {}).filename || '')
+    let name = bloodPickName(caption + ' ' + fname, clients), isBlood = BLOOD_RE.test((caption || '') + ' ' + fname)
+    if (!name || !isBlood) { // קוראים את הקובץ עצמו: האם זו בדיקת דם ושם המטופל/ת
+      const out = await askBrainOnce('קראי את הקובץ בנתיב ' + file + ' (בכלי Read). האם זו בדיקת דם? אם כן, מה שם המטופל/ת שכתוב בה? החזירי JSON בלבד, בלי טקסט נוסף: {"blood":true|false,"name":"השם כפי שכתוב, או ריק"}', undefined, { tools: true, timeoutMs: 180000 }).catch(() => '')
+      let j = null; try { j = JSON.parse(String(out).match(/\{[\s\S]*\}/)[0]) } catch {}
+      if (j && j.blood === false && !BLOOD_RE.test(caption || '')) { if (msg.type === 'document') await client.sendMessage(config.owner, 'הקובץ לא נראה לי בדיקת דם, השארתי אותו בלי טיפול.').catch(() => {}); try { fs.unlinkSync(file) } catch {}; return }
+      isBlood = true
+      if (!name && j && j.name) { const nm = bloodPickName(j.name, clients); name = nm }
+    }
+    if (!name) { BLOOD_WAIT = { file, mime, fname, at: Date.now(), names: clients.map((c) => c.name.split(' ')[0]) }; await client.sendMessage(config.owner, toWhatsApp('קיבלתי בדיקת דם ולא זיהיתי של מי. תכתוב לי את שם המתאמן/ת ואמשיך.')).catch(() => {}); return }
+    await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(await bloodProcess(name, file, mime, fname)))).catch(() => {})
+  } catch (e) { console.error('bloodFromChat', e.message); await client.sendMessage(config.owner, 'לא הצלחתי לעבד את הבדיקה: ' + String(e.message).slice(0, 160)).catch(() => {}) }
+}
+async function bloodWaitReply(text) {
+  if (!BLOOD_WAIT || Date.now() - BLOOD_WAIT.at > 30 * 60000) { BLOOD_WAIT = null; return false }
+  const t = String(text || '').trim(); if (!t || t.split(/\s+/).length > 3) return false
+  const clients = await bloodClients(), name = bloodPickName(t, clients)
+  if (!name) { await client.sendMessage(config.owner, 'לא מצאתי מתאמן/ת בשם הזה. תכתוב שם כמו בלוח.').catch(() => {}); return true }
+  const w = BLOOD_WAIT; BLOOD_WAIT = null
+  try { await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(await bloodProcess(name, w.file, w.mime, w.fname)))) } catch (e) { await client.sendMessage(config.owner, 'לא הצלחתי: ' + String(e.message).slice(0, 160)).catch(() => {}) }
+  return true
+}
 // ── מה לעשות היום (1.11.26, אביאל): כל בוקר 3 עד 5 הפעולות הכי חשובות מכל המתאמנים, ההודעות המוכנות מחכות בכרטיס בלוח ──
 async function todoMorning() {
   if (!config.owner || !clientReady) return; markRan('todo'); return /* 2.11.26 אביאל: "שיהיה קצר" — אוחד להודעת הבוקר האחת של morning-agent (09:30) */
@@ -911,6 +1119,73 @@ async function todoMorning() {
     await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(msg))).catch(() => {})
   } catch (e) { console.error('todoMorning', e.message) } }
 cron.schedule('40 7 * * 0-5', todoMorning, { timezone: 'Asia/Jerusalem' })
+// 16.11.26 תדריך מחקר על התיק לפני פתיחת וול סטריט, ימים ב'-ו'
+async function stocksBrief() {
+  if (!config.owner || !clientReady) return
+  try { markRan('stocks'); const t = await stocks.brief(); if (t) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(t))) }
+  catch (e) { console.error('stocksBrief', e.message); client.sendMessage(config.owner, toWhatsApp('תדריך המניות נכשל: ' + e.message.slice(0, 200))).catch(() => {}) } }
+cron.schedule('30 15 * * 1-5', stocksBrief, { timezone: 'Asia/Jerusalem' })
+// התראות בזמן המסחר בארה"ב (16:30-23:15 שעון ישראל), שינויי דירוג פעם בשעה
+let stocksAlertBusy = false
+async function stocksAlerts() {
+  if (!config.owner || !clientReady || stocksAlertBusy) return
+  const m = ilNow().mins; if (m < 16 * 60 + 45 || m > 23 * 60 + 15) return
+  stocksAlertBusy = true
+  try { const t = await stocks.alerts(new Date().getMinutes() < 15); if (t) await client.sendMessage(config.owner, toWhatsApp(t)) }
+  catch (e) { console.error('stocksAlerts', e.message) } finally { stocksAlertBusy = false } }
+cron.schedule('*/15 16-23 * * 1-5', stocksAlerts, { timezone: 'Asia/Jerusalem' })
+// דוחות: שמירת הציפיות לפני הדוח, וניתוח בבוקר שאחרי (ושוב ב-16:00 לדוחות של לפני הפתיחה)
+cron.schedule('0 15 * * 1-5', () => stocks.earningsSnapshot().catch((e) => console.error('earningsSnapshot', e.message)), { timezone: 'Asia/Jerusalem' })
+async function stocksEarnings() {
+  if (!config.owner || !clientReady) return
+  try { const t = await stocks.earningsDue(); for (const part of t.split('\n\n=====\n\n').filter(Boolean)) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(part))) }
+  catch (e) { console.error('stocksEarnings', e.message); client.sendMessage(config.owner, toWhatsApp('ניתוח הדוחות נכשל: ' + e.message.slice(0, 200))).catch(() => {}) } }
+cron.schedule('30 8 * * 2-6', stocksEarnings, { timezone: 'Asia/Jerusalem' })
+cron.schedule('0 16 * * 1-5', stocksEarnings, { timezone: 'Asia/Jerusalem' })
+// 16.11.26 אביאל: בדיקת תזה לכל אחזקה, כל יום ראשון בבוקר — תקציר + הדוח המלא כקובץ
+async function stocksWeekly() {
+  if (!config.owner || !clientReady) return
+  try { markRan('stocksWeekly'); const r = await stocks.weekly()
+    if (r.text) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(r.text)))
+    if (r.file && fs.existsSync(r.file)) await client.sendMessage(config.owner, MessageMedia.fromFilePath(r.file), { sendMediaAsDocument: true }).catch((e) => console.error('[stocksWeekly file]', e.message))
+  } catch (e) { console.error('stocksWeekly', e.message); client.sendMessage(config.owner, toWhatsApp('בדיקת התזה השבועית נכשלה: ' + e.message.slice(0, 200))).catch(() => {}) } }
+cron.schedule('0 9 * * 0', stocksWeekly, { timezone: 'Asia/Jerusalem' })
+// 16.11.26 אביאל: סיכום סוף יום מסחר עם תובנה, אחרי הסגירה בארה"ב
+async function stocksEod() {
+  if (!config.owner || !clientReady) { console.log('[stocks] eod skipped: client not ready'); return }
+  try { markRan('stocksEod'); const t = await stocks.eod(); if (t) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(t))) } catch (e) { console.error('stocksEod', e.message) } }
+cron.schedule('20 23 * * 1-5', stocksEod, { timezone: 'Asia/Jerusalem' })
+// 18.11.26: הסיכומים של 16-17.11 והניתוח של NVIDIA לא רצו (כנראה העוזרת הופעלה מחדש בדיוק בזמנים). כל 10 דקות משלימים מה שפוספס היום
+let stocksCatchupBusy = false
+cron.schedule('*/10 8-23 * * 1-6', async () => {
+  if (!config.owner || !clientReady || stocksCatchupBusy) return
+  let r = {}; try { r = JSON.parse(fs.readFileSync(RUNS_PATH, 'utf8')) } catch {}
+  const n = ilNow(), weekday = n.dow >= 1 && n.dow <= 5
+  stocksCatchupBusy = true
+  try {
+    if (weekday && n.mins >= 15 * 60 + 40 && n.mins < 23 * 60 && r.stocks !== n.day) { console.log('[stocks] catch-up: brief'); await stocksBrief() }
+    if (weekday && n.mins >= 23 * 60 + 30 && r.stocksEod !== n.day) { console.log('[stocks] catch-up: eod'); await stocksEod() }
+    if (n.mins % 60 < 10 && r.stocksEarningsHour !== n.day + ':' + Math.floor(n.mins / 60)) { r.stocksEarningsHour = n.day + ':' + Math.floor(n.mins / 60); markRanKey('stocksEarningsHour', r.stocksEarningsHour); await stocksEarnings() }
+  } finally { stocksCatchupBusy = false } }, { timezone: 'Asia/Jerusalem' })
+// 16.11.26 אביאל: סיכום סרטונים חדשים של מיכה סטוקס, כל ערב
+cron.schedule('0 21 * * *', async () => { if (!config.owner || !clientReady) return
+  try { const t = await stocks.youtube(); if (t) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(t))) } catch (e) { console.error('stocksYoutube', e.message) } }, { timezone: 'Asia/Jerusalem' })
+// כמה צילומים ברצף נאספים יחד (20 שניות שקט) ונקראים בהרצה אחת
+let stocksMediaFiles = [], stocksMediaTimer = null
+async function stocksFromMedia(msg) {
+  try {
+    const media = await msg.downloadMedia(); if (!media || !media.data) return
+    const ext = msg.type === 'video' ? 'mp4' : /png/i.test(media.mimetype || '') ? 'png' : 'jpg'
+    const dir = path.join(stocks.DIR, 'inbox'); fs.mkdirSync(dir, { recursive: true })
+    const file = path.join(dir, 'pf-' + Date.now() + '-' + stocksMediaFiles.length + '.' + ext); fs.writeFileSync(file, Buffer.from(media.data, 'base64'))
+    if (!stocksMediaFiles.length) client.sendMessage(config.owner, toWhatsApp('קיבלתי, קורא את התיק מהמסך.')).catch(() => {})
+    stocksMediaFiles.push(file); clearTimeout(stocksMediaTimer)
+    stocksMediaTimer = setTimeout(async () => {
+      const files = stocksMediaFiles; stocksMediaFiles = []
+      try { const t = await stocks.updateFromMedia(files); await client.sendMessage(config.owner, toWhatsApp(t)) }
+      catch (e) { console.error('stocksFromMedia', e.message); client.sendMessage(config.owner, toWhatsApp('לא הצלחתי לקרוא את התיק מהמסך: ' + e.message.slice(0, 200))).catch(() => {}) }
+    }, 20000)
+  } catch (e) { console.error('stocksFromMedia dl', e.message) } }
 // ── תזכורת טופס לליד (1.11.26, אביאל): מי שלא מילא טופס — אחרי יום ואחרי 3 ימים, מהוואטסאפ העסקי, ועדכון לאביאל ──
 async function leadNudges() {
   if (!config.owner || !clientReady) return; const n0 = ilNow(), h = Math.floor(n0.mins / 60); if (h < 10 || h >= 20 || n0.dow === 6) return
@@ -1047,8 +1322,10 @@ client.on('authenticated', () => setStatus('authenticated'))
 client.on('auth_failure', (m) => setStatus('auth_failure', { reason: String(m) }))
 client.on('disconnected', (r) => { clientReady = false; setStatus('disconnected', { reason: String(r) }) })
 
+client.on('authenticated', () => setTimeout(async () => { if (clientReady) return; try { const pg = client.pupPage; await pg.screenshot({ path: path.join(ROOT, 'stuck.png') }); const st = await pg.evaluate(() => ({ t: document.title, b: (document.body && document.body.innerText || '').slice(0, 300) })); console.log('[stuck]', JSON.stringify(st)) } catch (e) { console.log('[stuck] err', e.message) } }, 90000))
 client.on('ready', () => {
   clientReady = true
+  console.log('[apartment] group', aptGid || 'not known yet — waiting for a message in the group')
   try { fs.unlinkSync(QR_PATH) } catch {}
   setStatus(config.owner ? 'paired' : 'ready_waiting_pair')
 })
@@ -1088,6 +1365,11 @@ function onIncoming(msg) {
     if (config.owner && cid === config.owner) {
       console.log('[msg]', JSON.stringify({ from: msg.from, to: msg.to, fromMe: msg.fromMe, cid, text: text.slice(0, 60) }))
     }
+    if (cid && aptGid && cid === aptGid) { logAptFeedback(msg); return } // קבוצת הדירות עם אמא — רק רישום
+    if (cid && !aptGid && cid.endsWith('@g.us')) aptGroupAdopt(msg, cid)
+    if (cid && cid.endsWith('@g.us')) { const rc = routes.catOf(cid), mine = config.owner && (msg.author === config.owner) && !String(msg.body || '').startsWith(BOT_MARK)
+      if (rc) { if (mine) { ROUTE_REPLY = { gid: cid, until: Date.now() + 3 * 60000 }; const pm = Object.create(msg); Object.defineProperties(pm, { from: { value: config.owner }, fromMe: { value: false }, author: { value: undefined } }); onIncoming(pm) } return } // תשובה בקבוצה שלנו = כמו בצ'אט עם העוזרת
+      const kw = mine && msg.type === 'chat' && routes.KEYWORD[String(msg.body || '').trim()]; if (kw && !routes.gidFor(kw)) { routes.adopt(kw, cid); client.sendMessage(cid, BOT_MARK + routes.INTRO[kw]).catch(() => {}); console.log('[routes] adopted', kw, cid); return } }
     if (cid && cid.endsWith('@g.us')) { const ug = updGid(); if (cid === ug) { if (config.owner && msg.author === config.owner && !String(msg.body || '').startsWith(BOT_MARK)) { UPD_UNTIL = Date.now() + 3 * 60000; const pm = Object.create(msg); Object.defineProperties(pm, { from: { value: config.owner }, fromMe: { value: false }, author: { value: undefined } }); onIncoming(pm) } return } /* תשובה בקבוצת העדכונים = כמו בצ'אט עם העוזרת, והמענה חוזר לקבוצה */ if (!ug && msg.type === 'chat' && (msg.fromMe || msg.author === config.owner)) updGroupAdopt(msg, cid).catch(() => {}) } // 5.11.26 קבוצת "עדכוני מתאמנים"
     if (cid && cid.endsWith('@g.us')) { const ag = groupAgents.agentFor(cid); if (ag) { if (msg.type === 'chat') ag.handle(msg); return } if (msg.type === 'chat' && (msg.fromMe || msg.author === config.owner)) groupAgents.adopt(msg, cid).then((a) => { if (a) a.handle(msg) }).catch(() => {}); return } // קבוצות הסוכנים
     if (!cid || cid.endsWith('@g.us')) return // בלי קבוצות
@@ -1128,6 +1410,9 @@ function onIncoming(msg) {
     }
 
     // תמונה בערוץ של אביאל → ניתוח (למשל תמונת התקדמות של לקוח)
+    // 16.11.26 צילום / הקלטת מסך של התיק עם "תיק" בכיתוב → עדכון האחזקות בסוכן המניות
+    if ((msg.type === 'image' || msg.type === 'video') && config.owner && cid === config.owner && stocks.isMediaCaption(text)) { stocksFromMedia(msg); return }
+    if ((msg.type === 'image' || msg.type === 'document') && config.owner && cid === config.owner && bloodCandidate(msg, text)) { queue = queue.then(() => bloodFromChat(msg, text)).catch((e) => console.error('[blood]', e)); return }
     if (msg.type === 'image' && config.owner && cid === config.owner) {
       queue = queue.then(() => handlePhoto(msg, text)).catch((e) => console.error('[queue]', e))
       return
@@ -1176,6 +1461,11 @@ function onIncoming(msg) {
 
     // 11.11.26 פרוטוקול הקיץ: "פרוטוקול 0501234567 דנה כהן" / "פרוטוקול מצב" / "פרוטוקול עצור <טלפון>" / "פרוטוקול אשר <טלפון>" (protocol.js)
     if (protocol.isCommand(text)) { queue = queue.then(() => protocol.handleCommand(text)).catch((e) => console.error('[protocol]', e)); return }
+
+    // 16.11.26 "תיק" / "מניות" — תדריך מחקר על התיק עכשיו (stocks.js). רץ ברקע, לא חוסם את התור
+    if (stocks.isCommand(text)) { client.sendMessage(config.owner, toWhatsApp('אוסף נתונים וחדשות על התיק, זה לוקח כ-4 דקות.')).catch(() => {}); stocksBrief(); return }
+    { const dm = stocks.deepCommand(text); if (dm) { client.sendMessage(config.owner, toWhatsApp(`מתחיל צלילה לעומק על ${dm[1].toUpperCase()}. זה לוקח כ-10 דקות.`)).catch(() => {}); stocks.deep(dm[1]).then((t) => client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(t)))).catch((e) => { console.error('[stocks deep]', e.message); client.sendMessage(config.owner, toWhatsApp('הצלילה נכשלה: ' + e.message.slice(0, 200))).catch(() => {}) }); return } }
+    { const lm = stocks.levelCommand(text); if (lm) { stocks.setLevel(lm).then(() => client.sendMessage(config.owner, toWhatsApp(`רשמתי: אתריע כש-${lm[1].toUpperCase()} ${lm[2]} ${lm[3]}.`))).catch((e) => console.error('[stocks level]', e.message)); return } }
 
     // "תמחקי את מה ששלחת לעומר" / "מחק הודעה לשון" / "תמחקי את ההודעה האחרונה" — מחיקה לכולם
     const delM = text.match(/^(?:תמחק|תמחקי|מחק|מחקי|תבטל|תבטלי)\s+(?:את\s+)?(?:מה ששלחת|ההודעה(?:\s+האחרונה)?|הודעה)(?:\s+(?:ש(?:שלחת\s+)?)?(?:ל|של)\s*(.+))?$/)
@@ -1253,11 +1543,12 @@ function onIncoming(msg) {
     if (/^סיכום\s+\S+$/.test(String(text || '').trim()) && MEET_PENDING[String(text).trim().split(/\s+/)[1]]) { queue = queue.then(() => meetSend(text)).catch((e) => console.error('[meet]', e)); return } // שליחת סיכום פגישה
     if (coordAgent.isReply(text)) { queue = queue.then(() => coordAgent.handleReply(text)).catch((e) => console.error('[coord]', e)); return } // 6.11.26 אישור הצעה לאירוע / יום בלי מכון
     if (/^(אשר|דחה)\s+\S/.test(String(text || '').trim()) && SWAP_PENDING[String(text).trim().split(/\s+/)[1].replace(/[:：].*$/, '')]) { queue = queue.then(() => swapDecide(text)).catch((e) => console.error('[swap]', e)); return } // בקשת החלפה בתפריט
+    if (BLOOD_WAIT && config.owner && cid === config.owner && Date.now() - BLOOD_WAIT.at < 30 * 60000 && String(text || '').trim().split(/\s+/).length <= 3 && !/^(תוספים|שלח|בטל|אשר|דחה|סיכום)\b/.test(String(text || '').trim()) && BLOOD_WAIT.names.some((n) => String(text).includes(n))) { queue = queue.then(() => bloodWaitReply(text)).catch(() => {}); return }
     { const m = String(text || '').trim().match(/^תוספים\s+(.+)$/); if (m) { queue = queue.then(async () => { try { const r = await coachApi('dashboardBloodSuppSend', [m[1].trim()]); await client.sendMessage(config.owner, 'נשלח ל' + String(r.name).split(' ')[0] + ': ' + r.items.join(', ') + '. עם הקישורים מהמדריך, ונכנס לו/ה לויטמינים ותוספים באפליקציה') } catch (e) { await client.sendMessage(config.owner, 'לא נשלח: ' + e.message) } }).catch(() => {}); return } } // 5.11.26 תוספים לפי בדיקות דם
     if (/^שלח\s+\S/.test(String(text || '').trim()) && TECH_PENDING[String(text).trim().split(/\s+/)[1].replace(/[:：].*$/, '')]) { queue = queue.then(() => techReply(text)).catch((e) => console.error('[tech-reply]', e)); return } // תשובה לסרטון טכניקה
     if (morningAgent.isReply(text) && !coachCmd.hasPending()) { queue = queue.then(() => morningAgent.handleReply(text)).catch((e) => console.error('[morning-agent]', e)); return } // תשובה לסוכן הבוקר
-    if (groupAgents.has('avi') && coachCmd.isCandidate(text) && !coachCmd.hasPending()) { queue = queue.then(() => client.sendMessage(config.owner, toWhatsApp('פקודות על מתאמנים עברו לאבי המאמן, בקבוצה שלו. פה אני המנהלת האישית שלך.'))).catch(() => {}); return }
-    if (coachCmd.isCandidate(text)) { queue = queue.then(async () => { if (!(await coachCmd.handle(text))) await handle(msg, text) }).catch((e) => console.error('[coach-cmd]', e)); return } // פקודת מאמן; לא פקודה → שיחה רגילה
+    if (groupAgents.has('avi') && coachCmd.isCandidate(text, msg.hasQuotedMsg) && !coachCmd.hasPending()) { queue = queue.then(() => client.sendMessage(config.owner, toWhatsApp('פקודות על מתאמנים עברו לאבי המאמן, בקבוצה שלו. פה אני המנהלת האישית שלך.'))).catch(() => {}); return }
+    if (coachCmd.isCandidate(text, msg.hasQuotedMsg)) { queue = queue.then(async () => { if (!(await coachCmd.handle(text))) await handle(msg, text) }).catch((e) => console.error('[coach-cmd]', e)); return } // פקודת מאמן; לא פקודה → שיחה רגילה
     if (foodReview.isReply(text)) { queue = queue.then(() => foodReview.handleReply(text)).catch((e) => console.error('[food-review]', e)); return } // תשובה לבדיקת המאכלים היומית
     const closeCmd = advisor.parseCloseCommand(text)
     if (closeCmd) {
@@ -1271,11 +1562,32 @@ function onIncoming(msg) {
 
     // "כן שון" רק אם באמת יש תשובה ממתינה לשון; אחרת זו שיחה רגילה עם העוזרת ("כן אני מגיע מחר")
     // כמה אישורים בהודעה אחת: "כן רון, כן שון, לא יובל" — כל אחד נבדק ונשלח בנפרד
+    { const all = String(text || '').trim().match(/^(כן|שלח|שלחי|לא|בטל|בטלי) לכולם$/), ids = all ? advisor.nudgeBatchIds().filter((i) => drafts.get(i)) : [] // 21.11.26: תזכורות המתאמנים מגיעות בהודעה אחת
+      if (all && ids.length) { const yes = /^(כן|שלח|שלחי)$/.test(all[1]), acc = []
+        if (!yes) { ids.forEach((i) => drafts.remove(i)); client.sendMessage(config.owner, toWhatsApp('בוטל. ' + ids.length + ' תזכורות לא נשלחו.')).catch(() => {}); return }
+        for (const i of ids) queue = queue.then(() => handleDraftCommand(msg, { type: 'send', ref: String(i), option: 1, force: false, override: null, _acc: acc })).catch((e) => console.error('[draft]', e))
+        queue = queue.then(() => client.sendMessage(config.owner, toWhatsApp(acc.length ? 'נשלח: ' + acc.join(', ') + '.' : 'לא נשלח כלום.'))).catch(() => {})
+        return } }
     const multi = drafts.parseCommands(text)
     if (multi && multi.every((c) => /^\d+$/.test(c.ref) || drafts.resolveRef(c.ref))) {
-      for (const c of multi) queue = queue.then(() => handleDraftCommand(msg, c)).catch((e) => console.error('[draft]', e))
+      const acc = [] // 21.11.26: אישור אחד לכל הסבב במקום "נשלח ל..." על כל שם
+      for (const c of multi) { c._acc = acc; queue = queue.then(() => handleDraftCommand(msg, c)).catch((e) => console.error('[draft]', e)) }
+      queue = queue.then(() => { if (acc.length) return client.sendMessage(config.owner, toWhatsApp('נשלח: ' + acc.join(', ') + '.')) }).catch(() => {})
       return
     }
+    if (config.owner && cid === config.owner) { // 19.11.26: אישור ניתוח בדיקות דם (ציטוט "כן" / "רק ניתוח" / "לא", או "בדיקות <שם> כן"), ו"מי בלי בדיקות"
+      const be = msg.hasQuotedMsg && bloodGate.byStanza(msg._data && msg._data.quotedStanzaID), bm = be && bloodGate.modeOf(text), bn = be && be.k === 'blood' ? be.n : null
+      { const bp = be && bloodGate.pickOf(text), pick = be && be.o && (bp || (bm === 'yes' ? 1 : 0)) // 20.11.26: בחירה במספר מתוך האפשרויות ("כן" = אפשרות 1)
+        if (be && be.k === 'brain' && be.o && (pick || bm === 'no')) { queue = queue.then(() => bm === 'no' && !bp ? bloodGate.brainOption(be, be.o.indexOf('hold') + 1) : bloodGate.brainOption(be, pick)).catch((e) => console.error('[brain-gate]', e)); return }
+        if (be && be.k === 'prog' && pick) { queue = queue.then(() => bloodGate.progOption(be, pick)).catch((e) => console.error('[prog-gate]', e)); return } }
+      if (be && be.k === 'brain' && (bm === 'yes' || bm === 'no')) { queue = queue.then(() => bloodGate.brainDecide(be.n, bm)).catch((e) => console.error('[brain-gate]', e)); return } // 20.11.26: "כן"/"לא" על הצעה מהמוח
+      if (bn && bm) { queue = queue.then(() => bloodGate.decide(bn, bm)).catch((e) => console.error('[blood-gate]', e)); return }
+      const bc = bloodGate.parseCmd(text); if (bc && bc.mode) { queue = queue.then(() => bloodGate.decide(bc.who, bc.mode)).catch((e) => console.error('[blood-gate]', e)); return }
+      { const mc0 = String(text || '').trim().match(/^בטל ימים גבוהים\s+(.+)$/); if (mc0) { queue = queue.then(async () => { try { const r = await coachApi('dashboardCycleOff', [mc0[1].trim()]); await client.sendMessage(config.owner, toWhatsApp('בוטל: ' + String(r.name).split(' ')[0] + ' חזר/ה ליעד קבוע של ' + r.k + ' קלוריות.')) } catch (e) { await client.sendMessage(config.owner, toWhatsApp('לא בוטל: ' + String(e.message).slice(0, 120))) } }).catch(() => {}); return } } // 20.11.26
+      if (bloodGate.isPendingCmd(text)) { queue = queue.then(() => bloodGate.pending()).catch((e) => console.error('[pending]', e)); return }
+      if (bloodGate.isMissingCmd(text)) { queue = queue.then(() => bloodGate.missing()).catch((e) => console.error('[blood-gate]', e)); return } }
+    { const mq0 = msg.hasQuotedMsg && config.owner && cid === config.owner && mealRelay.qidByStanza(msg._data && msg._data.quotedStanzaID) // 18.11.26: "כן"/תיקון על הודעת ארוחה — לפני הטיוטות
+      if (mq0) { queue = queue.then(() => mealRelay.fix(mq0, text)).catch((e) => { console.error('[meal-fix]', e); client.sendMessage(config.owner, toWhatsApp('התיקון לארוחה לא עבר: ' + String(e.message || e).slice(0, 120))).catch(() => {}) }); return } }
     const draftCmd = drafts.parseCommand(text)
     // "כן"/"1"/"2" בלי שם ובלי ציטוט — רק אם הדבר האחרון שהעוזרת הציעה היא טיוטה שעדיין ממתינה; אחרת זו שיחה רגילה
     const bare = draftCmd && !draftCmd.ref && !msg.hasQuotedMsg
@@ -1298,6 +1610,8 @@ function onIncoming(msg) {
     if (msg.hasQuotedMsg) {
       queue = queue.then(async () => {
         const quoted = await msg.getQuotedMessage().catch(() => null)
+        const mq = quoted && config.owner && cid === config.owner && mealRelay.qidFor(quoted.id?._serialized) // 18.11.26: תיקון לארוחה מצולמת
+        if (mq) return mealRelay.fix(mq, text).catch((e) => { console.error('[meal-fix]', e); return client.sendMessage(config.owner, toWhatsApp('התיקון לארוחה לא עבר: ' + String(e.message || e).slice(0, 120))).catch(() => {}) })
         const qid = quoted && drafts.findByAlert(quoted.id?._serialized)
         if (qid && draftCmd) { // פקודה עם תוספת שלא זוהתה — לא טקסט ללקוח
           if (draftCmd.type === 'cancel') return handleDraftCommand(msg, { type: 'cancel', ref: String(qid) })
@@ -1533,14 +1847,14 @@ async function handleDraftCommand(msg, cmd) {
   if (!cmd.force && last?.is_from_me && Date.parse(String(last.timestamp).replace(' ', 'T')) > Date.parse(it.at)) {
     return say(`כבר ענית ל${it.name} בעצמך, אז לא שלחתי. אם בכל זאת: "כן ${id}!"`)
   }
-  const text = drafts.stripEmoji(cmd.override || (cmd.option === 2 && it.alt ? it.alt : it.text))
+  const text = drafts.stripEmoji(cmd.override || (cmd.option === 3 && it.alt2 ? it.alt2 : cmd.option === 2 && it.alt ? it.alt : it.text))
   try {
     await drafts.sendToClient(it, text)
     drafts.remove(id)
     try { advisor.onDraftSent(it, Number(id)) } catch (e) { console.error('[advisor-sent]', e.message) }
     if (cmd.override && text !== it.text) { profiles.recordCorrection({ name: it.name, clientText: it.clientText || '', draft: it.text, final: text, how: 'override' }); bump('overridden') } else bump('sentAsIs')
     console.log('[draft] sent #' + id, 'to', it.name)
-    say(`נשלח ל${it.name}.`)
+    if (cmd._acc) cmd._acc.push(it.name); else say(`נשלח ל${it.name}.`)
   } catch (e) {
     console.error('[draft] send failed', e.message)
     say(`השליחה ל${it.name} נכשלה. התשובה נשמרה, אפשר לנסות שוב עם "כן ${id}".`)
@@ -1627,7 +1941,8 @@ function scheduleRoutine(cronExp, promptOrFn, label, freshSession) {
 // כל משימה יומית נרשמת כשרצה; כל 5 דקות בודקים מה היה צריך לרוץ היום ועוד לא רץ, ומריצים אם עדיין רלוונטי.
 const RUNS_PATH = path.join(ROOT, 'job-runs.json')
 const ilNow = () => { const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short' }).formatToParts(new Date()).map((x) => [x.type, x.value])); return { day: `${p.year}-${p.month}-${p.day}`, mins: (Number(p.hour) % 24) * 60 + Number(p.minute), dow: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday) } }
-function markRan(key) { let r = {}; try { r = JSON.parse(fs.readFileSync(RUNS_PATH, 'utf8')) } catch {} r[key] = ilNow().day; const tmp = RUNS_PATH + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(r)); fs.renameSync(tmp, RUNS_PATH) }
+function markRan(key) { markRanKey(key, ilNow().day) }
+function markRanKey(key, val) { let r = {}; try { r = JSON.parse(fs.readFileSync(RUNS_PATH, 'utf8')) } catch {} r[key] = val; const tmp = RUNS_PATH + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(r)); fs.renameSync(tmp, RUNS_PATH) }
 function ranToday(key) { try { return JSON.parse(fs.readFileSync(RUNS_PATH, 'utf8'))[key] === ilNow().day } catch { return false } }
 
 // מוסיפים לפרומפט את אירועי היומן האישי (iCloud) בפועל — לא רק את הבוקינג
@@ -1663,6 +1978,7 @@ scheduleRoutine(config.monthlyCron, MONTHLY_PROMPT, 'monthly', false) // 1 לח�
 try { advisor.install({ client, config, toWhatsApp, drafts, biz, profiles, askBrainOnce, isReady: () => clientReady, offerDraft: (id) => offerDraft(id), updGid }) } catch (e) { console.error('[advisor-install]', e.message) }
 // 11.11.26 פרוטוקול הקיץ: פרק פתיחה מיד + שיעור כל בוקר לקונים. הגדרות ב-protocol-config.json (dryRun=true עד שאביאל מפעיל)
 const protocol = require('./protocol')
+const stocks = require('./stocks')
 try { protocol.install({ sendOwner: (t) => client.sendMessage(config.owner, toWhatsApp(t)), askBrainOnce, readBoard: () => advisor.readBoard(), isReady: () => !!(config.owner && clientReady), previewToOwner: true }) } catch (e) { console.error('[protocol-install]', e.message) }
 
 // השלמה: [מפתח, מתי (דקות מחצות), עד מתי רלוונטי, ימים (0=ראשון), פונקציה]
@@ -1701,6 +2017,8 @@ async function catchUp() {
 }
 setInterval(catchUp, 5 * 60 * 1000)
 client.on('ready', () => setTimeout(catchUp, 90 * 1000))
+client.on('ready', () => setTimeout(async () => { if (!config.owner) return; try { const made = await routes.ensure(client, config.owner); console.log('[routes] ensure', JSON.stringify(made), JSON.stringify(routes.load()))
+  for (const c of made) await client.sendMessage(routes.gidFor(c), BOT_MARK + routes.INTRO[c]).catch(() => {}) } catch (e) { console.error('[routes] ensure', e.message) } }, 20 * 1000))
 
 // ── בדיקה עצמית של הווטסאפ העסקי: כל 10 דק' מתריעה מיד אם התנתק (ופותחת דף QR במק); כל בוקר 8:30 — רק אם משהו לא תקין ──
 const BRIDGE_LOG = path.join(require('os').homedir(), 'whatsapp-mcp', 'bridge.log')

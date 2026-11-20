@@ -294,10 +294,22 @@ async function dailyCloseList() {
 }
 
 // ── בוט 2: חידושים ──
-function renewalText(c, weeks) {
+/* 20.11.26 (אביאל): הודעת החידוש (14 יום לפני הסוף) נפתחת בתוצאות האמיתיות של המתאמן/ת: שינוי במשקל לפי המטרה ותרגילים שעלו בהם */
+async function renewalResults(c) {
+  const card = await coachApi('dashboardClientCard', [c.name]); if (!card || !card.token) return ''
+  const get = async (api) => { const r = await fetch(INTAKE_LINK + '?api=' + api + '&t=' + encodeURIComponent(card.token), { signal: AbortSignal.timeout(60000) }); const j = await r.json(); return (j && j.r) || {} }
+  const [D, P] = await Promise.all([get('data'), get('plan')]); const parts = []
+  const ws = (D.hist || []).map((x) => Number(x[1])).filter((x) => x > 30), goal = String(card.goal || '')
+  if (ws.length >= 4) { const diff = Math.round((ws[ws.length - 1] - ws[0]) * 10) / 10; if (/ירידה|חיטוב/.test(goal) && diff <= -1) parts.push('ירדת ' + Math.abs(diff) + ' ק״ג'); else if (/עלייה|מסה/.test(goal) && diff >= 1) parts.push('עלית ' + diff + ' ק״ג') }
+  const ups = []; Object.keys(P.lifts || {}).forEach((ex) => { const L = P.lifts[ex], f = L && L.first && Number(L.first.kg), b = L && Number(L.best); if (f > 0 && b > f) ups.push({ ex, f, b, pct: (b - f) / f }) })
+  if (ups.length) { ups.sort((a, b) => b.pct - a.pct); const t = ups[0]; parts.push((parts.length ? 'ו' : '') + 'עלית במשקלים ב-' + ups.length + ' תרגילים (' + t.ex.replace(/\s*\([^)]*\)\s*$/, '') + ' מ-' + t.f + ' ל-' + t.b + ' ק״ג)') }
+  return parts.length ? parts.join(' ') + '.' : ''
+}
+function renewalText(c, weeks, res) {
   const n = c.name.split(' ')[0]
   const end = c.end ? `${c.end.getDate()}.${c.end.getMonth() + 1}` : 'בקרוב'
   const price = PRICE_OLD
+  if (res) return `${n}, ${weeks} שבועות ביחד: ${res} התהליך שלנו נגמר ב-${end}. אני עובר למבנה של 3 חודשים, כי שם קורה השינוי שנשאר. למי שכבר איתי המחיר נשאר ${price} לחודש במקום ${PRICE_NEW}. ממשיכים?`
   if (c.pace && c.lastMeet) return `${n}, ${weeks} שבועות ביחד והקצב שקבענו היה ${c.pace} ק"ג בשבוע. התהליך שלנו נגמר ב-${end}. אני עובר למבנה של 3 חודשים, כי שם קורה השינוי שנשאר. למי שכבר איתי המחיר נשאר ${price} לחודש במקום ${PRICE_NEW}. ממשיכים?`
   return `${n}, התהליך שלנו נגמר ב-${end}. אני עובר מהחודש הבא למבנה של 3 חודשים, כי זה הזמן שבו באמת רואים את השינוי. למי שכבר איתי המחיר נשאר ${price} לחודש במקום ${PRICE_NEW}. רוצה שנמשיך?`
 }
@@ -314,7 +326,8 @@ async function renewalsTick() {
     if (c.balance > 500 && stage !== 'd0') { st.sent[stage] = 'skip-balance'; changed = true; await sayU(`*${c.name.split(' ')[0]} מסיים בעוד ${c.daysLeft} ימים*\nיתרה פתוחה ${c.balance} ₪. קודם התשלום, אחר כך החידוש.`); continue }
     const weeks = c.start ? Math.max(1, Math.round((Date.now() - c.start.getTime()) / (7 * DAY))) : 4
     const n = c.name.split(' ')[0]
-    const text = stage === 'd14' ? renewalText(c, weeks)
+    let res14 = ''; if (stage === 'd14') { try { res14 = await renewalResults(c) } catch (e) { console.error('[renewal-results]', e.message) } }
+    const text = stage === 'd14' ? renewalText(c, weeks, res14)
       : stage === 'd7' ? `${n}, עוד שבוע התהליך נגמר. ממשיכים או עוצרים? שתי התשובות בסדר, רק שאדע כדי לשמור לך מקום.`
       : stage === 'd3' ? `${n}, עוד 3 ימים התהליך שלנו נגמר. ממשיכים? אם כן, אני מסדר שהחודש הבא יתחיל בלי הפסקה.`
       : `${n}, היום התהליך שלנו נגמר רשמית. הגישה לאפליקציה נשארת לך עוד 7 ימים. אם תרצה לחזור, הכול שמור, רק תגיד.`
@@ -495,7 +508,7 @@ const NUDGE_TEXT = {
 async function nudgeTick() {
   if (!ctx.config.owner || !ctx.isReady() || !inWindow()) return
   const state = loadState(); state.nudges = state.nudges || {}; let changed = false
-  const tasks = (await readTasks()).filter((t) => t.status === 'פתוחה' && NUDGE_TEXT[t.rule] && t.phone)
+  const tasks = (await readTasks()).filter((t) => t.status === 'פתוחה' && NUDGE_TEXT[t.rule] && t.phone), batch = []
   for (const t of tasks) {
     const key = `${t.name}:${t.rule}`
     const last = state.nudges[key]
@@ -505,8 +518,15 @@ async function nudgeTick() {
     const text = NUDGE_TEXT[t.rule](t.name.split(' ')[0], days)
     const did = await makeDraft(t.phone, t.name, text)
     state.nudges[key] = new Date().toISOString(); changed = true
-    await sayU(`*${String(t.name).split(' ')[0]}: ${t.rule === 'weigh' ? 'לא נשקל' : t.rule === 'checkin' ? 'בלי צ׳ק-אין' : 'בלי אימונים'}* (#${did})\n${text}\n\n${hintU(String(t.name).split(' ')[0])}`)
+    batch.push({ did, first: String(t.name).split(' ')[0], rule: t.rule, text })
   }
+  /* 21.11.26 (אביאל: "יותר מדי הודעות"): כל התזכורות של הסבב בהודעה אחת, ואישור אחד לכולם */
+  const LBL = { weigh: 'לא נשקלו', checkin: 'בלי צ׳ק-אין', train: 'בלי אימונים' }
+  if (batch.length === 1) { const b = batch[0]; await sayU(`*${b.first}: ${b.rule === 'weigh' ? 'לא נשקל' : b.rule === 'checkin' ? 'בלי צ׳ק-אין' : 'בלי אימונים'}* (#${b.did})\n${b.text}\n\n${hintU(b.first)}`) }
+  else if (batch.length) { const L = [`*תזכורות למתאמנים* (${batch.length})`, '']
+    Object.keys(LBL).forEach((r) => { const g = batch.filter((b) => b.rule === r); if (!g.length) return; L.push(`*${LBL[r]}:* ${g.map((b) => b.first).join(', ')}`); L.push('> ' + NUDGE_TEXT[r]('(שם)', (g[0].text.match(/כבר (\d+) ימים/) || [])[1])); L.push('') })
+    L.push('*כן לכולם* שולח לכל אחד את ההודעה שלו · *לא לכולם* מבטל · או רק חלק: "כן ' + batch[0].first + ', כן ' + batch[1].first + '"')
+    state.nudgeBatch = { ids: batch.map((b) => b.did), at: new Date().toISOString() }; await sayU(L.join('\n')) }
   if (changed) saveState(state)
 }
 
@@ -665,6 +685,8 @@ async function outboxTick0() {
     /* 5.11.26: הודעה עם קישור לאפליקציה → מצרפים אחריה את סרטון ההסבר (intro.mp4) */
     if (st === 'נשלח' && /aviel112\.github\.io\/aviel-app\/[a-z]+-\d{3,5}/.test(m.text || '')) {
       try { await fetch('http://127.0.0.1:8080/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: `${normPhone(m.phone) || m.phone}@s.whatsapp.net`, message: '', media_path: require('path').join(__dirname, '..', 'aviel-app', 'live', 'intro.mp4') }), signal: AbortSignal.timeout(60000) }) } catch (e) { console.error('[outbox-intro]', e.message) }
+      /* 20.11.26 (אביאל): אחרי סרטון ההסבר, גם סרטון חיבור הצעדים (17 שנ׳, עם כיתוב וסימון איפה לוחצים) */
+      try { await fetch('http://127.0.0.1:8080/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: `${normPhone(m.phone) || m.phone}@s.whatsapp.net`, message: 'באייפון: ככה מחברים את הצעדים לאפליקציה. פעם אחת וזהו, מאז זה מתעדכן לבד', media_path: require('path').join(__dirname, '..', 'aviel-app', 'live', 'steps-howto.mp4') }), signal: AbortSignal.timeout(60000) }) } catch (e) { console.error('[outbox-steps]', e.message) }
     }
     log(`outbox ${m.id} ${m.label || m.phone}: ${st}`)
     try { obMark(m.id, st) } catch (e) { console.error('[outbox-mark]', e.message) }
@@ -799,4 +821,5 @@ function install(c) {
   log('installed')
 }
 
-module.exports = { askApproval, install, onDraftSent, registerLead, parseCloseCommand, handleCloseCommand, parseBotCommand, handleBotCommand, botsStatus, botsText, setBotEnabled, run, BOTS, dailyCloseList, ceoReport, readBoard, leadCloserTick, renewalsTick, proofTick, referralTick, callBriefTick, paymentTick, nudgeTick, reviewTick, storyTick }
+const nudgeBatchIds = () => { try { const b = loadState().nudgeBatch; return b && Date.now() - Date.parse(b.at) < 36 * 3600e3 ? b.ids : [] } catch (e) { return [] } }
+module.exports = { nudgeBatchIds, askApproval, install, onDraftSent, registerLead, parseCloseCommand, handleCloseCommand, parseBotCommand, handleBotCommand, botsStatus, botsText, setBotEnabled, run, BOTS, dailyCloseList, ceoReport, readBoard, leadCloserTick, renewalsTick, proofTick, referralTick, callBriefTick, paymentTick, nudgeTick, reviewTick, storyTick }
