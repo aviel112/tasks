@@ -853,13 +853,14 @@ async function weeklyCheckin() {
   const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה'))
   if (!rows.length) return
   await client.sendMessage(config.owner, toWhatsApp(`*סיכום שבוע אישי* — מכינה הודעה ל-${rows.length} מתאמנים לפי הנתונים של השבוע. כל אחת מגיעה בנפרד עם 3 נוסחים.`)).catch(() => {})
-  let made = 0; const skipped = []
+  let made = 0; const skipped = [], proof = []
   for (const c of rows) {
     const phone = pn(c.phone), first = String(c.name).split(' ')[0]
     try {
       const jid = (await biz.chatForPhone(phone).catch(() => null)) || `${phone}@s.whatsapp.net`
-      if (drafts.pendingForChat(jid, phone)) { skipped.push(first + ' (כבר מחכה טיוטה)'); continue }
       const f = await coachApi('dashboardWeekFacts', [c.name]).catch(() => null)
+      const pr = weekFacts.proofLine(first, f); if (pr) proof.push(pr) // 22.11.26 (אביאל): סימון לסטורי הוכחה
+      if (drafts.pendingForChat(jid, phone)) { skipped.push(first + ' (כבר מחכה טיוטה)'); continue }
       const ok = await alertWithDraft({
         title: 'סיכום שבוע',
         who: { chat_jid: jid, display: c.name, phone, content: '' },
@@ -871,7 +872,8 @@ async function weeklyCheckin() {
     } catch (e) { console.error('[checkin]', c.name, e.message); skipped.push(first + ' (תקלה)') }
     await new Promise((res) => setTimeout(res, 20000)) // לא להציף
   }
-  await client.sendMessage(config.owner, toWhatsApp(`סיכום שבוע: ${made} טיוטות מוכנות מתוך ${rows.length}.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : ''))).catch(() => {})
+  await client.sendMessage(config.owner, toWhatsApp(`סיכום שבוע: ${made} טיוטות מוכנות מתוך ${rows.length}.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : '') +
+    (proof.length ? '\n\n*חומר לסטורי הוכחה* (התקדמו לפי המטרה וגם שברו שיא השבוע):\n' + proof.join('\n') + '\nלבקש אישור לפני שמפרסמים.' : ''))).catch(() => {})
 }
 cron.schedule('0 10 * * 0', weeklyCheckin, { timezone: 'Asia/Jerusalem' })
 

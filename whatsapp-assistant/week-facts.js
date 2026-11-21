@@ -22,4 +22,12 @@ const RULES = 'סיכום שבוע אישי בקול של אביאל. לפתוח
   'נתון שכתוב עליו "לא נרשמו" אינו כישלון (ייתכן שפשוט לא נרשם באפליקציה): לא לנזוף, אפשר לשאול. ' +
   'אם אין נתונים בכלל: הודעה חמה וקצרה שמתעניינת איך עבר השבוע ומבקשת דבר אחד קטן לשבוע הזה (שקילת בוקר). ' +
   'בלי אימוג׳י. ניסוח ניטרלי מגדרית אם המין לא ברור מהתיק. לא לכתוב SKIP.'
-module.exports = { factsLine, hasData, situation, RULES }
+// מי שהתקדם במשקל לפי המטרה וגם עלה במשקל עבודה באותו שבוע
+function proofLine(first, f) {
+  if (!f || !f.diff || !(f.up && f.up.length)) return ''
+  const good = f.goal === 'ירידה' ? f.diff < 0 : f.goal === 'עלייה' ? f.diff > 0 : false
+  if (!good) return ''
+  const u = f.up[0]
+  return `• ${first}: ${f.diff > 0 ? '+' : '−'}${Math.abs(f.diff)} ק״ג בממוצע השבועי, ושיא ב${u.ex} (${u.now} ק״ג, +${u.diff})`
+}
+module.exports = { factsLine, hasData, situation, RULES, proofLine }
