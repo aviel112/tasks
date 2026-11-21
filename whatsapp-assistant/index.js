@@ -899,6 +899,7 @@ async function fridayReport() {
   }
   const lines = ['*סיכום שבוע של העוזרת*', '',
     total ? `אישרת כמו שזה: ${st.sentAsIs || 0} · שינית: ${st.overridden || 0} · ענית בעצמך: ${st.manual || 0} · ביטלת: ${st.cancelled || 0}` : 'השבוע לא אושרו טיוטות.',
+    (() => { const L = profiles.recentChoices(200).filter((c) => Date.parse(c.at) > weekAgo); if (!L.length) return null; const t = profiles.choiceTally(L); return `מבין הנוסחים בחרת: 1 — ${t[1] || 0} · 2 — ${t[2] || 0} · 3 — ${t[3] || 0} · ניסוח משלך — ${t.own || 0}` })(),
     learned ? '' : null, learned ? drafts.stripEmoji(learned).trim() : null,
     (() => { const u = api.usageSummary(); return u.calls ? `\nעלות API השבוע: $${u.week.toFixed(2)} (סך הכל $${u.total.toFixed(2)} מתוך 100$, עוד ${u.untilDays} ימים)` : null })()].filter((l) => l !== null)
   await client.sendMessage(config.owner, toWhatsApp(lines.join('\n'))).catch(() => {})
@@ -1864,6 +1865,8 @@ async function handleDraftCommand(msg, cmd) {
     await drafts.sendToClient(it, text)
     drafts.remove(id)
     try { advisor.onDraftSent(it, Number(id)) } catch (e) { console.error('[advisor-sent]', e.message) }
+    { const all = [it.text, it.alt, it.alt2].map((x) => drafts.stripEmoji(x || '')).filter(Boolean) // רק כשהייתה בחירה אמיתית (2 נוסחים ומעלה)
+      if (all.length >= 2) profiles.recordChoice({ name: it.name, option: all.includes(text) ? all.indexOf(text) + 1 : 'own', had: all.length, chosen: text, rejected: all.filter((x) => x !== text), reply: !!it.clientText }) }
     if (cmd.override && text !== it.text) { profiles.recordCorrection({ name: it.name, clientText: it.clientText || '', draft: it.text, final: text, how: 'override' }); bump('overridden') } else bump('sentAsIs')
     console.log('[draft] sent #' + id, 'to', it.name)
     if (cmd._acc) cmd._acc.push(it.name); else say(`נשלח ל${it.name}.`)
