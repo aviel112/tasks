@@ -853,12 +853,13 @@ async function weeklyCheckin() {
   const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה'))
   if (!rows.length) return
   await client.sendMessage(config.owner, toWhatsApp(`*סיכום שבוע אישי* — מכינה הודעה ל-${rows.length} מתאמנים לפי הנתונים של השבוע. כל אחת מגיעה בנפרד עם 3 נוסחים.`)).catch(() => {})
-  let made = 0; const skipped = [], proof = []
+  let made = 0; const skipped = [], proof = [], usage = []
   for (const c of rows) {
     const phone = pn(c.phone), first = String(c.name).split(' ')[0]
     try {
       const jid = (await biz.chatForPhone(phone).catch(() => null)) || `${phone}@s.whatsapp.net`
       const f = await coachApi('dashboardWeekFacts', [c.name]).catch(() => null)
+      usage.push({ first, f, seen: c.seen && c.seen.d })
       const pr = weekFacts.proofLine(first, f); if (pr) proof.push(pr) // 22.11.26 (אביאל): סימון לסטורי הוכחה
       if (drafts.pendingForChat(jid, phone)) { skipped.push(first + ' (כבר מחכה טיוטה)'); continue }
       const ok = await alertWithDraft({
@@ -874,6 +875,7 @@ async function weeklyCheckin() {
   }
   await client.sendMessage(config.owner, toWhatsApp(`סיכום שבוע: ${made} טיוטות מוכנות מתוך ${rows.length}.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : '') +
     (proof.length ? '\n\n*חומר לסטורי הוכחה* (התקדמו לפי המטרה וגם שברו שיא השבוע):\n' + proof.join('\n') + '\nלבקש אישור לפני שמפרסמים.' : ''))).catch(() => {})
+  const rep = weekFacts.usageReport(usage); if (rep) await client.sendMessage(config.owner, toWhatsApp(rep)).catch(() => {})
 }
 cron.schedule('0 10 * * 0', weeklyCheckin, { timezone: 'Asia/Jerusalem' })
 

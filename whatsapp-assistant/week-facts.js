@@ -30,4 +30,20 @@ function proofLine(first, f) {
   const u = f.up[0]
   return `• ${first}: ${f.diff > 0 ? '+' : '−'}${Math.abs(f.diff)} ק״ג בממוצע השבועי, ושיא ב${u.ex} (${u.now} ק״ג, +${u.diff})`
 }
-module.exports = { factsLine, hasData, situation, RULES, proofLine }
+// 22.11.26 (אביאל: "דוח מי משתמש במה"): שורה לכל מתאמן על 7 הימים האחרונים + סיכום. rows: [{ first, f, seen }]
+function usageReport(rows) {
+  const R = rows.filter((r) => r.f); if (!R.length) return ''
+  const dm = (d) => { const m = String(d || '').match(/^\d{4}-(\d\d)-(\d\d)/); return m ? `${Number(m[2])}.${Number(m[1])}` : '' }
+  const score = (f) => (f.weighs || 0) + (f.trains || 0) * 2 + (f.food || 0)
+  const n = R.length, cnt = (fn) => R.filter((r) => fn(r.f)).length
+  const L = ['*מי משתמש במה* (7 הימים האחרונים)',
+    `נשקלים 4 ימים ומעלה: ${cnt((f) => f.weighs >= 4)} מתוך ${n} · רושמים אימונים: ${cnt((f) => f.trains > 0)} מתוך ${n} · יומן אוכל 4 ימים ומעלה: ${cnt((f) => f.food >= 4)} מתוך ${n}`, '']
+  R.slice().sort((a, b) => score(b.f) - score(a.f)).forEach((r) => {
+    const f = r.f, s = dm(r.seen)
+    L.push(`${r.first}: שקילות ${f.weighs || 0} · אימונים ${f.trains || 0} · יומן ${f.food || 0}` + (s ? ` · כניסה אחרונה ${s}` : ' · בלי כניסה רשומה'))
+  })
+  const none = R.filter((r) => !score(r.f)).map((r) => r.first)
+  if (none.length) L.push('', `בלי שום רישום השבוע: ${none.join(', ')}`)
+  return L.join('\n')
+}
+module.exports = { factsLine, hasData, situation, RULES, proofLine, usageReport }
