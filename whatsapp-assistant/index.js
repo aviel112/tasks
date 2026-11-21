@@ -842,26 +842,36 @@ async function checkChurn() {
 }
 cron.schedule('30 10 * * 0-5', checkChurn, { timezone: 'Asia/Jerusalem' })
 
-// ── צ'ק-אין שבועי: יום ראשון 10:00 — הודעת פתיחת שבוע אישית לכל מתאמן פעיל, לאישור בשמות ──
+// ── סיכום שבוע אישי: יום ראשון 10:00 — לכל מתאמן פעיל בלוח (בלי משפחה/בדיקה), לפי נתוני השבוע מהאפליקציה; אחת אחת עם 3 אופציות ──
+// 22.11.26 (אביאל): מחליף את "פתיחת שבוע" שנשענה רק על השיחה בווטסאפ ורק על מי שכתב לאחרונה
+const weekFacts = require('./week-facts')
 async function weeklyCheckin() {
   markRan('checkin')
   if (!config.owner || !clientReady || !(await biz.bridgeAlive())) return
-  const rows = (await biz.cadence(45).catch(() => [])).filter((r) => r.active_days >= 3 && r.silent_days <= 14 && profiles.readProfile(r.chat_jid))
+  const [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))])
+  const pn = (raw) => { let d = String(raw || '').replace(/\D/g, ''); if (d.startsWith('972')) return d; if (d.startsWith('0')) d = d.slice(1); return /^5\d{8}$/.test(d) ? '972' + d : '' }
+  const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה'))
   if (!rows.length) return
-  await client.sendMessage(config.owner, toWhatsApp(`*פתיחת שבוע* — מכינה הודעה אישית ל-${rows.length} מתאמנים. מאשרים בשמות: "כן רון, כן שון, לא יובל".`)).catch(() => {})
-  for (const r of rows.slice(0, 15)) {
-    if (drafts.pendingForChat(r.chat_jid)) continue
+  await client.sendMessage(config.owner, toWhatsApp(`*סיכום שבוע אישי* — מכינה הודעה ל-${rows.length} מתאמנים לפי הנתונים של השבוע. כל אחת מגיעה בנפרד עם 3 נוסחים.`)).catch(() => {})
+  let made = 0; const skipped = []
+  for (const c of rows) {
+    const phone = pn(c.phone), first = String(c.name).split(' ')[0]
     try {
-      await alertWithDraft({
-        title: 'פתיחת שבוע',
-        who: { chat_jid: r.chat_jid, display: r.display, phone: r.phone, content: '' },
-        headline: 'פתיחת שבוע',
-        situation: 'יום ראשון בבוקר. אביאל שולח לכל מתאמן הודעה אישית לפתיחת השבוע.',
-        extraRules: 'להתייחס לדבר אחד ספציפי מהשבוע שעבר או מהמטרה שלו (לפי התיק והשיחה), ולתת יעד או מיקוד אחד לשבוע הזה (משקל, אימונים, תזונה) עם שאלה אחת. 1–3 שורות. לא "איך היה השבוע" גנרי. לא לכתוב SKIP.',
+      const jid = (await biz.chatForPhone(phone).catch(() => null)) || `${phone}@s.whatsapp.net`
+      if (drafts.pendingForChat(jid, phone)) { skipped.push(first + ' (כבר מחכה טיוטה)'); continue }
+      const f = await coachApi('dashboardWeekFacts', [c.name]).catch(() => null)
+      const ok = await alertWithDraft({
+        title: 'סיכום שבוע',
+        who: { chat_jid: jid, display: c.name, phone, content: '' },
+        headline: 'סיכום שבוע' + (weekFacts.hasData(f) ? '\n' + weekFacts.factsLine(f) : '\nאין נתונים מהשבוע באפליקציה'),
+        situation: weekFacts.situation(first, f),
+        extraRules: weekFacts.RULES,
       })
-    } catch (e) { console.error('[checkin]', e.message) }
+      if (ok) made++; else skipped.push(first)
+    } catch (e) { console.error('[checkin]', c.name, e.message); skipped.push(first + ' (תקלה)') }
     await new Promise((res) => setTimeout(res, 20000)) // לא להציף
   }
+  await client.sendMessage(config.owner, toWhatsApp(`סיכום שבוע: ${made} טיוטות מוכנות מתוך ${rows.length}.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : ''))).catch(() => {})
 }
 cron.schedule('0 10 * * 0', weeklyCheckin, { timezone: 'Asia/Jerusalem' })
 
@@ -1122,7 +1132,7 @@ cron.schedule('40 7 * * 0-5', todoMorning, { timezone: 'Asia/Jerusalem' })
 // 16.11.26 תדריך מחקר על התיק לפני פתיחת וול סטריט, ימים ב'-ו'
 async function stocksBrief() {
   if (!config.owner || !clientReady) return
-  try { markRan('stocks'); const t = await stocks.brief(); if (t) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(t))) }
+  try { const t = await stocks.brief(); if (t) { await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(t))); markRan('stocks') } }
   catch (e) { console.error('stocksBrief', e.message); client.sendMessage(config.owner, toWhatsApp('תדריך המניות נכשל: ' + e.message.slice(0, 200))).catch(() => {}) } }
 cron.schedule('30 15 * * 1-5', stocksBrief, { timezone: 'Asia/Jerusalem' })
 // התראות בזמן המסחר בארה"ב (16:30-23:15 שעון ישראל), שינויי דירוג פעם בשעה
@@ -1153,7 +1163,7 @@ cron.schedule('0 9 * * 0', stocksWeekly, { timezone: 'Asia/Jerusalem' })
 // 16.11.26 אביאל: סיכום סוף יום מסחר עם תובנה, אחרי הסגירה בארה"ב
 async function stocksEod() {
   if (!config.owner || !clientReady) { console.log('[stocks] eod skipped: client not ready'); return }
-  try { markRan('stocksEod'); const t = await stocks.eod(); if (t) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(t))) } catch (e) { console.error('stocksEod', e.message) } }
+  try { const t = await stocks.eod(); if (t) { await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(t))); markRan('stocksEod') } } catch (e) { console.error('stocksEod', e.message) } }
 cron.schedule('20 23 * * 1-5', stocksEod, { timezone: 'Asia/Jerusalem' })
 // 18.11.26: הסיכומים של 16-17.11 והניתוח של NVIDIA לא רצו (כנראה העוזרת הופעלה מחדש בדיוק בזמנים). כל 10 דקות משלימים מה שפוספס היום
 let stocksCatchupBusy = false
