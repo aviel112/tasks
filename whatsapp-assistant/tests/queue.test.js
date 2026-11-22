@@ -36,6 +36,11 @@ const P = (n, ph, extra) => ({ name: n, phone: ph, chat_jid: ph + '@lid', ...ext
     const f = DQ_FILE(); const q = JSON.parse(fs.readFileSync(f)); q.curAt = Date.now() - 16 * 60e3; fs.writeFileSync(f, JSON.stringify(q)); await draftQueueTick()
     eq('אחרי 15 דק׳ בלי תגובה — ממשיכים לבא', out, ['IDAN', 'IDO'])
   })
+  await scenario({ 1: P('עידן', '1'), 2: P('עידו', '2'), 3: P('שני', '3') }, [], async ({ draftQueuePush, draftQueueTick, draftQueueSkip, T, out, D }) => {
+    draftQueuePush(1, 'IDAN'); draftQueuePush(2, 'IDO'); draftQueuePush(3, 'SHANI'); await T()
+    draftQueueSkip(); await T(); delete D[2]; await draftQueueTick(); draftQueueSkip(); await T(); delete D[3]; await draftQueueTick()
+    eq('אחרי שתי הופעות בלי תשובה — לא חוזר היום', out.filter((x) => x === 'IDAN').length, 2)
+  })
   const y = new Date(Date.now() - 86400e3).toISOString()
   await scenario({ 1: P('עידן', '1') }, [{ at: y, chat_jid: '1@lid', jid: '1' }], async ({ draftQueuePush, T, out }) => {
     draftQueuePush(1, 'IDAN'); await T(); eq('הודעה מאתמול לא חוסמת היום', out, ['IDAN'])

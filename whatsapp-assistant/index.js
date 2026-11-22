@@ -80,7 +80,9 @@ async function refreshTraineeNames() { try { const l = await coachApi('dashboard
 setTimeout(refreshTraineeNames, 5000); setInterval(refreshTraineeNames, 30 * 60 * 1000)
 const aboutTrainee = (t) => !!(TRAINEE_RE && TRAINEE_RE.test(String(t || '')))
 const OUT_SEEN = [] // הודעות שיצאו בפועל (message_create), 60 שניות אחרונות
+const TECH_RE = /```|python3? -c|\bcd ~\/|במסוף|בטרמינל|תריץ את (?:הפקודה|זה)|npm (?:run|install)|node [\w./-]+\.js/ // 22.11.26: אביאל לא מקבל קוד/פקודות
 { const _send = client.sendMessage.bind(client); client.sendMessage = (to, ...r) => { let dest = to
+    if (to === config.owner && typeof r[0] === 'string' && TECH_RE.test(r[0])) { try { fs.appendFileSync(path.join(ROOT, 'brain', 'tech-todo.md'), `\n## ${new Date().toISOString()}\n${r[0].slice(0, 3000)}\n`) } catch {} console.log('[tech-filter] held a technical message for Claude Code'); r[0] = toWhatsApp('משהו טכני לא הצליח אצלי. העברתי לתיקון, לא צריך לעשות כלום.') }
     try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); let cat = routes.classify(txt); if ((!cat || cat === 'biz') && aboutTrainee(txt) && !/^\*?(ליד|5 לסגור)/.test(txt.replace(/^[\u200b\s]+/, ''))) cat = 'coach'; dest = routes.gidFor(cat) || to } } } catch (e) { dest = to }
     const body = typeof r[0] === 'string' ? r[0] : ''
     return _send(dest, ...r).catch(async (e) => { // 22.11.26: ווטסאפ לפעמים זורק שגיאה אחרי שההודעה כבר יצאה → בודקים לפני שמנסים שוב (אחרת כפילויות)
@@ -951,13 +953,13 @@ function draftQueuePush(id, text, to, front, img) { const q = dqLoad(); if (!q.i
 // "הבא" / "דלג": מעבירים את הנוכחית לסוף התור (היא נשארת פתוחה לאישור לפי שם או מספר)
 function draftQueueSkip() { const q = dqLoad(); if (!q.items.length && !q.cur) return false
   if (!q.items.some((x) => x.id !== q.cur && drafts.get(x.id) && !(x.notBefore && Date.now() < x.notBefore))) { client.sendMessage(config.owner, toWhatsApp('זה האחרון בתור להיום. אפשר לענות עליו, או *לא* כדי לבטל.')).catch(() => {}); return true } // 22.11.26: "הבא" על האחרון הציג אותו שוב
-   if (q.cur && drafts.get(q.cur) && q.curText) q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true }); q.cur = null; dqSave(q); draftQueueTick(); return true }
+   if (q.cur && drafts.get(q.cur) && q.curText) q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true, shows: (q.curShows || 1) + 1 }); q.cur = null; dqSave(q); draftQueueTick(); return true }
 let dqBusy = false
 async function draftQueueTick() {
   if (dqBusy || !config.owner || !clientReady) return
   const q = dqLoad(); if (q.cur && drafts.get(q.cur) && Date.now() - (q.curAt || 0) < 15 * 60e3) return // אביאל עוד לא טיפל בנוכחית
   // 22.11.26 (אביאל: "תמשיך לשלוח לי" — נתקע 40 דק׳ על עידן): 15 דקות בלי תגובה → הנוכחית לסוף התור (נשארת פתוחה), וממשיכים
-  if (q.cur && drafts.get(q.cur) && q.items.some((x) => x.id !== q.cur && drafts.get(x.id) && !(x.notBefore && Date.now() < x.notBefore))) { q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true }); q.cur = null; dqSave(q) }
+  if (q.cur && drafts.get(q.cur) && q.items.some((x) => x.id !== q.cur && drafts.get(x.id) && !(x.notBefore && Date.now() < x.notBefore))) { q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true, shows: (q.curShows || 1) + 1 }); q.cur = null; dqSave(q) }
   else if (q.cur && drafts.get(q.cur)) return
   if (!q.cur && !q.items.some((x) => !(x.notBefore && Date.now() < x.notBefore))) return
   dqBusy = true
@@ -966,6 +968,7 @@ async function draftQueueTick() {
     while (q.items.length) {
       const it = q.items.shift(); if (!drafts.get(it.id)) continue // בוטלה או נענתה בינתיים
       if (it.notBefore && Date.now() < it.notBefore) { later.push(it); continue } // נדחתה למחר
+      if (it.again && (it.shows || 1) >= 3) { /* הופעה שלישית → למחר */ const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(10, 0, 0, 0); later.push({ ...it, again: false, shows: 0, notBefore: t.getTime() }); console.log('[dq] shown twice without answer → tomorrow:', it.id); continue } // 22.11.26: עידן עלה 6 פעמים
       { const d = drafts.get(it.id), pn = String(d.phone || '').replace(/\D/g, '').slice(-9) // 22.11.26: כבר שלחת לו/ה משהו ב-12 השעות האחרונות → לא מציעים הודעה שנייה ברצף
         const ilDay = (t) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }), today = ilDay(Date.now()) // 22.11.26: "ברצף" = באותו יום, לא 12 שעות (עידן נדחה בגלל הודעה מאמש)
         const sentRecently = drafts.recentSent(200).some((x) => ilDay(Date.parse(x.at)) === today && (x.chat_jid === d.chat_jid || (pn && String(x.jid || '').replace(/\D/g, '').slice(-9) === pn)))
@@ -979,7 +982,7 @@ async function draftQueueTick() {
       const cap = toWhatsApp(it.text + (left ? `\n\n_(עוד ${left} בתור · *הבא* = לדלג לבינתיים)_` : ''))
       const sent = it.img && fs.existsSync(it.img) ? await client.sendMessage(it.to || config.owner, MessageMedia.fromFilePath(it.img), { caption: cap }) : await client.sendMessage(it.to || config.owner, cap) // 22.11.26: סטורי הוכחה — התמונה עם הטיוטה
       if (sent?.id?._serialized) drafts.setAlertMsgId(it.id, sent.id._serialized)
-      offerDraft(it.id); q.cur = it.id; q.curAt = Date.now(); q.curText = it.text; q.curTo = it.to; break
+      offerDraft(it.id); q.cur = it.id; q.curAt = Date.now(); q.curText = it.text; q.curTo = it.to; q.curShows = it.shows || 1; break
     }
     q.items = q.items.concat(later)
     dqSave(q)
