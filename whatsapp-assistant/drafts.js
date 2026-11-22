@@ -219,6 +219,11 @@ function latestId(maxAgeMs = 2 * 60 * 60 * 1000) {
   if (!items.length) return null
   return Number(items.sort((a, b) => Date.parse(b[1].at) - Date.parse(a[1].at))[0][0])
 }
+// 22.11.26 (אביאל: "אל תציע אותו מתאמן פעמיים"): כל הטיוטות הפתוחות של אותו אדם (לפי צ'אט או 9 ספרות אחרונות של הטלפון)
+function pendingForPerson(chat_jid, phone) {
+  const pn = String(phone || '').replace(/\D/g, '').slice(-9)
+  return Object.entries(load().items).filter(([, it]) => (chat_jid && it.chat_jid === chat_jid) || (pn && String(it.phone || '').replace(/\D/g, '').slice(-9) === pn)).map(([id, it]) => ({ id: Number(id), ...it }))
+}
 function pendingForChat(chat_jid, phone, replyOnly) {
   const pn = String(phone || '').replace(/\D/g, '')
   // replyOnly: רק טיוטת תשובה להודעה של הלקוח (clientText). טיוטה יזומה מהיועץ (חידוש/ליד/הוכחה) לא חוסמת התראה על הודעה חדשה שלו
@@ -231,6 +236,8 @@ function setBatch(id, meta) { const d = load(); if (d.items[id]) { d.items[id].b
 function batchedIds() { return Object.entries(load().items).filter(([, it]) => it.batch && it.batch.pending).map(([id]) => Number(id)) }
 function clearBatch(id, alertMsgId) { const d = load(); if (d.items[id]) { d.items[id].batch.pending = false; if (alertMsgId) d.items[id].alertMsgId = alertMsgId; save(d) } }
 
+// 22.11.26: טיוטה שנדחתה למחר — מאפסים את השעון כדי שלא תפוג אחרי 36 שעות מהיצירה
+function touch(id) { const d = load(); if (d.items[id]) { d.items[id].at = new Date().toISOString(); save(d) } }
 function updateText(id, text) { const d = load(); if (d.items[id]) { d.items[id].text = stripEmoji(text); d.items[id].at = new Date().toISOString(); save(d) } }
 
-module.exports = { variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }
+module.exports = { touch, pendingForPerson, variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }

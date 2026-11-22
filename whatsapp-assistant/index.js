@@ -427,7 +427,7 @@ setTimeout(checkApartmentReport, 60 * 1000) // ריצה ראשונה קצת אח
 const ISR_TIME = (ts) => new Date(ts).toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' })
 
 // מנסח טיוטה, שומר אותה עם מספר, ושולח לאביאל התראה. מחזיר false אם המוח קבע שאין צורך לענות.
-async function alertWithDraft({ title, who, situation, extraRules = '', headline = '', allowTools = false, batchable = false, hold = false }) {
+async function alertWithDraft({ title, who, situation, extraRules = '', headline = '', allowTools = false, batchable = false, hold = false, noQuote = false }) {
   const name = biz.nameOf(who)
   const heb = await profiles.hebrewFirstName(name).catch(() => '')
   const shown = /[\u0590-\u05FF]/.test(name) ? name : heb ? `${heb} (${name})` : name
@@ -448,7 +448,7 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   // כל מה שהלקוח כתב מאז התשובה האחרונה של אביאל (לא רק השורה האחרונה)
   const recent = (await biz.recentMessages(who.chat_jid, 8).catch(() => '')).split('\n')
   const streak = recent.slice(recent.map((l) => l.startsWith('אביאל:')).lastIndexOf(true) + 1).map((l) => l.replace(/^הוא\/היא:\s*/, '')).filter(Boolean)
-  const saidFull = (streak.length ? streak.join('\n') : String(who.content || '')).trim().slice(0, 500)
+  const saidFull = noQuote ? '' : (streak.length ? streak.join('\n') : String(who.content || '')).trim().slice(0, 500) // 22.11.26: הודעה יזומה (סיכום שבוע) — בלי ציטוט של צ'יט-צ'ט ישן
   const said = saidFull.replace(/\s+/g, ' ').slice(0, 160)
   const id = parsed ? drafts.add({ chat_jid: who.chat_jid, phone: who.phone, name, alias: heb, text: parsed.draft, alt: parsed.alt, alt2: parsed.alt2 || '', clientText: saidFull, risk: parsed.risk }) : null
   // שגרתי → נכנס לסבב הבא (12/16/20) במקום להקפיץ עכשיו
@@ -838,6 +838,7 @@ async function checkChurn() {
       headline: `שקט כבר ${Math.round(r.silent_days)} ימים (בדרך כלל כותב כל ${r.avg_gap <= 1.2 ? 'יום' : Math.round(r.avg_gap) + ' ימים'})`,
       situation: `מתאמן שבדרך כלל כותב לאביאל כל ${r.avg_gap} ימים שותק כבר ${Math.round(r.silent_days)} ימים. אביאל רוצה לפנות אליו לפני שהוא נעלם.`,
       extraRules: 'הודעת "מה קורה" אישית וחמה, לא לחץ ולא אשמה: להתייחס לדבר האחרון שדיברו עליו או למטרה שלו מהתיק, ולסיים בשאלה אחת קלה שמחזירה אותו לשיחה. 1–3 שורות. לא לכתוב SKIP.',
+      noQuote: true,
     })
     console.log('[churn]', sent ? 'alert:' : 'skip:', biz.nameOf(r))
   }
@@ -863,16 +864,19 @@ async function weeklyCheckin(opts = {}) {
       const f = await coachApi('dashboardWeekFacts', [c.name]).catch(() => null), noApp = (tags[c.name] || []).includes(weekFacts.NOAPP_TAG)
       usage.push({ first, f, seen: c.seen && c.seen.d, noApp })
       const pr = noApp ? '' : weekFacts.proofLine(first, f); if (pr) proof.push(pr) // 22.11.26 (אביאל): סימון לסטורי הוכחה
-      if (drafts.pendingForChat(jid, phone, true)) { skipped.push(first + ' (מחכה תשובה שלך להודעה שלו)'); continue } // 22.11.26: רק תשובה שלא ענית חוסמת, לא תזכורת של בוט
+      // 22.11.26 (אביאל: "הודעה אחת לכל מתאמן"): כל מה שפתוח לו (תשובה שלא ענית, חידוש, בקשת תמונה, תזכורת) נכנס לאותה הודעה, והטיוטות הישנות נמחקות
+      const open = drafts.pendingForPerson(jid, phone)
+      const openTxt = open.map((d) => d.clientText ? `${first} כתב/ה לאביאל ועוד לא קיבל/ה תשובה: "${String(d.clientText).slice(0, 300)}" (טיוטת התשובה שהוכנה: "${String(d.text).slice(0, 200)}")` : `הודעה שהבוט הכין ועוד לא נשלחה: "${String(d.text).slice(0, 300)}"`).join('\n')
       const ok = await alertWithDraft({
         title: 'סיכום שבוע',
         who: { chat_jid: jid, display: c.name, phone, content: '' },
-        headline: 'סיכום שבוע' + (noApp ? ' (בלי אפליקציה)' : '') + (weekFacts.hasData(f, noApp) ? '\n' + weekFacts.factsLine(f, noApp) : noApp ? '\nלא הגיעו שקילות השבוע' : '\nאין נתונים מהשבוע באפליקציה'),
-        situation: weekFacts.situation(first, f, noApp),
-        extraRules: weekFacts.RULES,
+        headline: 'סיכום שבוע' + (noApp ? ' (בלי אפליקציה)' : '') + (open.length ? ` + ${open.length} ${open.length === 1 ? 'דבר פתוח' : 'דברים פתוחים'}` : '') + (weekFacts.hasData(f, noApp) ? '\n' + weekFacts.factsLine(f, noApp) : noApp ? '\nלא הגיעו שקילות השבוע' : '\nאין נתונים מהשבוע באפליקציה'),
+        situation: weekFacts.situation(first, f, noApp) + (openTxt ? '\n\nבנוסף, דברים פתוחים מול ' + first + ' שחייבים להיכנס לאותה הודעה (בקצרה, בלי לאבד את הבקשה עצמה: חידוש, תמונה, תשובה לשאלה):\n' + openTxt : ''),
+        extraRules: weekFacts.RULES + (openTxt ? ' יש דברים פתוחים: לשלב אותם בטבעיות באותה הודעה, עד 5 שורות. אם הוא/היא שאל/ה משהו — לענות קודם.' : ''),
         hold: true,
+        noQuote: true,
       })
-      if (ok) made++; else skipped.push(first)
+      if (ok) { made++; open.forEach((d) => drafts.remove(d.id)); if (open.length) console.log('[checkin] folded', open.length, 'into', first) } else skipped.push(first)
     } catch (e) { console.error('[checkin]', c.name, e.message); skipped.push(first + ' (תקלה)') }
   }
   if (opts.only) { try { const o = JSON.parse(fs.readFileSync(WKSUM_PATH, 'utf8')); o.items = o.items.filter((x) => !opts.only.includes(x.name)).concat(rows.map((c) => ({ name: c.name, first: String(c.name).split(' ')[0], phone: pn(c.phone) }))); fs.writeFileSync(WKSUM_PATH, JSON.stringify(o)) } catch {}
@@ -897,18 +901,27 @@ let dqBusy = false
 async function draftQueueTick() {
   if (dqBusy || !config.owner || !clientReady) return
   const q = dqLoad(); if (q.cur && drafts.get(q.cur) && Date.now() - (q.curAt || 0) < 3 * 3600e3) return // אביאל עוד לא טיפל בנוכחית (אחרי 3 שעות ממשיכים, והיא נשארת פתוחה)
-  if (!q.cur && !q.items.length) return
+  if (!q.cur && !q.items.some((x) => !(x.notBefore && Date.now() < x.notBefore))) return
   dqBusy = true
   try {
-    q.cur = null
+    q.cur = null; const later = []
     while (q.items.length) {
       const it = q.items.shift(); if (!drafts.get(it.id)) continue // בוטלה או נענתה בינתיים
+      if (it.notBefore && Date.now() < it.notBefore) { later.push(it); continue } // נדחתה למחר
+      { const d = drafts.get(it.id), pn = String(d.phone || '').replace(/\D/g, '').slice(-9) // 22.11.26: כבר שלחת לו/ה משהו ב-12 השעות האחרונות → לא מציעים הודעה שנייה ברצף
+        const sentRecently = drafts.recentSent(200).some((x) => Date.now() - Date.parse(x.at) < 12 * 3600e3 && (x.chat_jid === d.chat_jid || (pn && String(x.jid || '').replace(/\D/g, '').slice(-9) === pn)))
+        const last = sentRecently ? null : await biz.lastMessage(d.chat_jid).catch(() => null)
+        const wroteRecently = last && last.is_from_me && Date.now() - Date.parse(String(last.timestamp).replace(' ', 'T')) < 12 * 3600e3 && !d.clientText
+        if (!d.clientText && (sentRecently || wroteRecently)) { /* תשובה ללקוח שכתב — לא נוגעים */
+          if (!it.postponed) { const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(10, 0, 0, 0); drafts.touch && drafts.touch(it.id); later.push({ ...it, postponed: true, notBefore: t.getTime() }); console.log('[dq] postponed to tomorrow:', d.name, it.id); continue } // פעם אחת למחר בבוקר, לא נמחק
+          drafts.remove(it.id); q.total = Math.max(0, q.total - 1); console.log('[dq] dropped (already messaged):', d.name, it.id); continue } }
       if (!it.again) q.shown++
-      const left = q.items.filter((x) => drafts.get(x.id)).length
+      const left = q.items.filter((x) => drafts.get(x.id) && !(x.notBefore && Date.now() < x.notBefore)).length
       const sent = await client.sendMessage(it.to || config.owner, toWhatsApp(it.text + (left ? `\n\n_(עוד ${left} בתור · *הבא* = לדלג לבינתיים)_` : '')))
       if (sent?.id?._serialized) drafts.setAlertMsgId(it.id, sent.id._serialized)
       offerDraft(it.id); q.cur = it.id; q.curAt = Date.now(); q.curText = it.text; q.curTo = it.to; break
     }
+    q.items = q.items.concat(later)
     dqSave(q)
   } catch (e) { console.error('[dq]', e.message) } finally { dqBusy = false }
 }
