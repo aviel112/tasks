@@ -588,6 +588,22 @@ async function freeSlots({ days = 3, from = Number(config.leadCallFrom) || 10, t
   return out
 }
 
+// 22.11.26 (שני שאלה "בכמה משקל התחלנו?" והטיוטה ענתה "אני בודק"): המספרים האמיתיים מכרטיס המתאמן — כדי שהטיוטה תענה עם הנתון
+const NUMS_C = {}
+async function traineeNumbers(name) {
+  const hit = NUMS_C[name]; if (hit && Date.now() - hit.at < 30 * 60e3) return hit.v
+  const card = await coachApi('dashboardClientCard', [name]); const sp = ((card && card.spark) || []).filter((x) => x && Number(x.kg) > 0)
+  const L = []
+  if (sp.length) {
+    const last7 = sp.slice(-7).map((x) => Number(x.kg)), avg = Math.round(last7.reduce((a, b) => a + b, 0) / last7.length * 10) / 10
+    const start = Number(card.first) || Number(sp[0].kg), low = Math.min(...sp.map((x) => Number(x.kg))), d = Math.round((avg - start) * 10) / 10
+    L.push(`משקל התחלה: ${start} ק״ג (${sp[0].d})`, `ממוצע 7 השקילות האחרונות: ${avg} (${d > 0 ? '+' : ''}${d} מההתחלה)`, `שקילה אחרונה: ${sp[sp.length - 1].kg} ב-${sp[sp.length - 1].d}`, `הכי נמוך: ${low}`)
+  }
+  const lf = ((card && card.lifts) || []).filter((x) => x && x.first && x.best > x.first).sort((a, b) => (b.best - b.first) - (a.best - a.first)).slice(0, 3)
+  if (lf.length) L.push('התקדמות בכוח: ' + lf.map((x) => `${x.ex} ${x.first}→${x.best} ק״ג`).join(', '))
+  const v = L.length ? 'המספרים של המתאמן (אמיתיים, מהאפליקציה — לענות איתם ישירות על שאלה על משקל/התקדמות, לא "אני בודק"): ' + L.join(' · ') : ''
+  NUMS_C[name] = { at: Date.now(), v }; return v
+}
 // מהלוח (גיליון המתאמנים): מטרה, קצב, התחלה, ימים שנותרו, פגישה הבאה, יתרה — ומההתראה היומית של הלוח: מי לא נשקל / לא בקצב
 const BOARD_ALERTS_PATH = path.join(ROOT, 'brain', 'board-alerts.json')
 async function boardContext(who) {
@@ -601,6 +617,7 @@ async function boardContext(who) {
       const f = (d) => (d ? new Date(d).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', day: 'numeric', month: 'numeric' }) : '')
       lines.push([c.goal && `מטרה: ${c.goal}`, c.pace && `קצב יעד: ${c.pace} ק"ג בשבוע`, c.start && `התחיל: ${f(c.start)}`, c.daysLeft != null && `נותרו בתהליך: ${c.daysLeft} ימים`,
         c.nextMeet && `פגישה הבאה: ${f(c.nextMeet)}`, c.balance ? `יתרה פתוחה: ${c.balance} ₪` : null, c.coach && `מאמן: ${c.coach}`].filter(Boolean).join(' · '))
+      const nums = await traineeNumbers(c.name).catch(() => ''); if (nums) lines.push(nums)
     }
   } catch {}
   try {
