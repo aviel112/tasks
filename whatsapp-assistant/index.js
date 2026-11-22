@@ -705,6 +705,7 @@ async function dropAnsweredDrafts() {
   }
 }
 
+const LIVE_CHAT_MIN = 20 // 22.11.26
 async function checkWaitingClients() {
   if (!config.owner || !clientReady || waitingBusy || !isActive(new Date()) || Date.now() < waitingPauseUntil) return
   waitingBusy = true
@@ -715,7 +716,11 @@ async function checkWaitingClients() {
     const due = (await biz.waitingForReply(0, 3)).filter((w) =>
       nudged[w.chat_jid] !== w.timestamp && !CLOSER_RE.test(String(w.content || '').trim()) &&
       (Date.now() - Date.parse(String(w.timestamp).replace(' ', 'T'))) / 60000 >= WAIT_MINUTES)
+    const sentLog = drafts.recentSent(200)
     for (const w of due.slice(0, 6)) {
+      // 22.11.26 (מצב שיחה חיה: 8 טיוטות לשחף ו-7 לעומר נמחקו היום כי אביאל ענה בעצמו): אביאל כתב לו ב-20 הדקות האחרונות → הוא בשיחה, לא מכינים טיוטה (בלי לסמן — אם יפסיק לענות, תיווצר בסבב הבא)
+      { const lastMe = Math.max(Date.parse(String(await biz.lastFromMe(w.chat_jid).catch(() => '') || '').replace(' ', 'T')) || 0, ...sentLog.filter((x) => x.chat_jid === w.chat_jid).map((x) => Date.parse(x.at)))
+        if (Date.now() - lastMe < LIVE_CHAT_MIN * 60e3) { console.log('[biz-waiting] live chat, no draft:', biz.nameOf(w)); continue } }
       // הודעה קולית של הלקוח → לתמלל קודם, כדי שהטיוטה תענה על מה שהוא באמת שאל
       if (w.media_type === 'audio' && !/^\[קולי\]/.test(w.content || '')) {
         await transcripts.transcribeClientAudio(w.chat_jid, { hours: 3, max: 3 }).catch(() => 0)
