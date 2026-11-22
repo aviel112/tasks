@@ -960,6 +960,8 @@ function draftQueueSkip() { const q = dqLoad(); if (!q.items.length && !q.cur) r
 let dqBusy = false
 async function draftQueueTick() {
   if (dqBusy || !config.owner || !clientReady) return
+  // 22.11.26 (ההודעה לעומר נדרסה כשנכתבה ישירות לקובץ התור): הוספה מבחוץ = קובץ בתיקיית queue-inbox; רק התהליך הזה כותב ל-draft-queue.json
+  try { const dir = path.join(ROOT, 'queue-inbox'); if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json')).sort()) { const fp = path.join(dir, f); try { const x = JSON.parse(fs.readFileSync(fp, 'utf8')); fs.rmSync(fp); if (x && x.id && drafts.get(x.id)) draftQueuePush(x.id, x.text, x.to || config.owner, !!x.front, x.img) } catch (e) { console.error('[dq-inbox]', f, e.message); try { fs.renameSync(fp, fp + '.bad') } catch {} } } } catch (e) {}
   const q = dqLoad(); if (q.cur && drafts.get(q.cur) && Date.now() - (q.curAt || 0) < 15 * 60e3) return // אביאל עוד לא טיפל בנוכחית
   // 22.11.26 (אביאל: "תמשיך לשלוח לי" — נתקע 40 דק׳ על עידן): 15 דקות בלי תגובה → הנוכחית לסוף התור (נשארת פתוחה), וממשיכים
   if (q.cur && drafts.get(q.cur) && q.items.some((x) => x.id !== q.cur && drafts.get(x.id) && !(x.notBefore && Date.now() < x.notBefore))) { q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true, shows: (q.curShows || 1) + 1 }); q.cur = null; dqSave(q) }
@@ -1432,7 +1434,7 @@ cron.schedule('30 11 * * *', foodReviewDaily, { timezone: 'Asia/Jerusalem' })
 const coachCmd = require('./coach-cmd')
 coachCmd.init({ client, config, toWhatsApp })
 const coachOps = require('./coach-ops') // 22.11.26
-coachOps.init({ say: (t) => client.sendMessage(config.owner, toWhatsApp(t)).catch(() => {}), drafts, biz, askBrainOnce, queuePush: (id, t, front) => draftQueuePush(id, t, config.owner, !!front) })
+coachOps.init({ say: (t) => client.sendMessage(config.owner, toWhatsApp(t)).catch(() => {}), drafts, biz, profiles, askBrainOnce, queuePush: (id, t, front) => draftQueuePush(id, t, config.owner, !!front) })
 const groupAgents = require('./accountant') // שרונה (כספים) ואבי המאמן (מתאמנים) — כל אחד בקבוצה משלו (2.11.26)
 groupAgents.init({ client, config, toWhatsApp })
 setInterval(() => coachCmd.names(), 36e5)
