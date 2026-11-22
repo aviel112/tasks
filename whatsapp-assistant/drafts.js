@@ -253,8 +253,21 @@ function unverifiedNumbers(draft, source) {
   }
   return out
 }
+// 22.11.26 (טיוטה לשחף: "בסביבות 17 יעבוד לך?"): שעה בטיוטה חייבת להופיע במה שהלקוח כתב עכשיו — לא מספיק שהמספר קיים איפשהו בתיק
+const TIME_CTX = /(פנוי|פנויה|שעה|יעבוד|מתאים|נפגש|נפגשים|פגישה|אימון ב|נקבע|נדבר|אתקשר|בבוקר|בצהריים|בערב|אחרי|עד ה?\d)/
+function unverifiedTimes(draft, said) {
+  const t = String(draft || ''); if (!TIME_CTX.test(t)) return []
+  const src = String(said || ''), out = []
+  for (const m of t.matchAll(/(?:^|[^\d.])(\d{1,2})(?::(\d{2}))?(?![\d.]|\s*(?:ק״ג|קג|ק"ג|גרם|קילו|קלוריות|ימים|שבועות|דקות|אימונים|חזרות|סטים|%))/g)) {
+    const h = Number(m[1]); if (h < 6 || h > 23) continue
+    const v = m[2] ? `${m[1]}:${m[2]}` : m[1]
+    if (new RegExp('(^|[^\\d])' + m[1] + '(?![\\d])').test(src)) continue
+    if (!out.includes(v)) out.push(v)
+  }
+  return out
+}
 // 22.11.26: טיוטה שנדחתה למחר — מאפסים את השעון כדי שלא תפוג אחרי 36 שעות מהיצירה
 function touch(id) { const d = load(); if (d.items[id]) { d.items[id].at = new Date().toISOString(); save(d) } }
 function updateText(id, text) { const d = load(); if (d.items[id]) { d.items[id].text = stripEmoji(text); d.items[id].at = new Date().toISOString(); save(d) } }
 
-module.exports = { unverifiedNumbers, numbersIn, touch, pendingForPerson, variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }
+module.exports = { unverifiedTimes, unverifiedNumbers, numbersIn, touch, pendingForPerson, variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }

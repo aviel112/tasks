@@ -457,7 +457,9 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   const parsed = drafts.splitBrainDraft(answer)
   // כל מה שהלקוח כתב מאז התשובה האחרונה של אביאל (לא רק השורה האחרונה)
   const recent = (await biz.recentMessages(who.chat_jid, 8).catch(() => '')).split('\n')
-  const streak = recent.slice(recent.map((l) => l.startsWith('אביאל:')).lastIndexOf(true) + 1).map((l) => l.replace(/^הוא\/היא:\s*/, '')).filter(Boolean)
+  let streak = recent.slice(recent.map((l) => l.startsWith('אביאל:')).lastIndexOf(true) + 1).map((l) => l.replace(/^הוא\/היא:\s*/, '')).filter(Boolean)
+  { const ls = drafts.recentSent(200).filter((x) => x.chat_jid === who.chat_jid).pop() // 22.11.26: מה שאביאל אישר יצא דרך הגשר ולא נשמר כ"שלו" — הציטוט מתחיל אחרי ההודעה האחרונה שנשלחה
+    if (ls) { const after = await biz.inboundSince(who.chat_jid, ls.at).catch(() => null); if (after) streak = after.map((r) => String(r.content || '')).filter(Boolean) } }
   const saidFull = noQuote ? '' : (streak.length ? streak.join('\n') : String(who.content || '')).trim().slice(0, 500) // 22.11.26: הודעה יזומה (סיכום שבוע) — בלי ציטוט של צ'יט-צ'ט ישן
   const said = saidFull.replace(/\s+/g, ' ').slice(0, 160)
   const id = parsed ? drafts.add({ chat_jid: who.chat_jid, phone: who.phone, name, alias: heb, text: parsed.draft, alt: parsed.alt, alt2: parsed.alt2 || '', clientText: saidFull, risk: parsed.risk }) : null
@@ -469,6 +471,8 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   // 22.11.26 (שומר מספרים): מספר בטיוטה שלא מופיע בשום מקור → שורת "לבדוק" מתחת לנוסחים
   const srcAll = [ctxText, situation, extraRules, headline, saidFull, who.content].join(' ')
   const unv = parsed ? [parsed.draft, parsed.alt, parsed.alt2].map((t, i) => ({ i: i + 1, n: t ? drafts.unverifiedNumbers(t, srcAll) : [] })).filter((x) => x.n.length) : []
+  const tms = parsed ? [parsed.draft, parsed.alt, parsed.alt2].map((t, i) => ({ i: i + 1, n: t ? drafts.unverifiedTimes(t, [saidFull, who.content, situation].join(' ')) : [] })).filter((x) => x.n.length) : []
+  for (const x of tms) { const u = unv.find((y) => y.i === x.i); if (u) u.n = [...new Set(u.n.concat(x.n))]; else unv.push(x) }
   const unvLine = unv.length ? '*לבדוק לפני ששולחים — מספר שלא מצאתי בנתונים:* ' + unv.map((x) => x.n.join(', ') + ` (נוסח ${x.i})`).join(' · ') : ''
   if (unv.length) console.log('[guard] unverified', name, JSON.stringify(unv))
   const quoteBlock = saidFull ? saidFull.split('\n').map((l) => '> ' + l).join('\n') : ''
