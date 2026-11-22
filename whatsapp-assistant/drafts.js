@@ -239,8 +239,22 @@ function setBatch(id, meta) { const d = load(); if (d.items[id]) { d.items[id].b
 function batchedIds() { return Object.entries(load().items).filter(([, it]) => it.batch && it.batch.pending).map(([id]) => Number(id)) }
 function clearBatch(id, alertMsgId) { const d = load(); if (d.items[id]) { d.items[id].batch.pending = false; if (alertMsgId) d.items[id].alertMsgId = alertMsgId; save(d) } }
 
+// 22.11.26 (שומר מספרים): כל מספר בטיוטה (משקל, קלוריות, שעה, מחיר, תאריך) חייב להופיע במקורות שהטיוטה נבנתה מהם.
+// מחזיר את המספרים שלא נמצאו. 0–10 לא נבדקים (מילים כמו "3 אימונים" נבדקות רק כשזה מעל 10). שעה ותאריך נבדקים כמו שהם.
+function numbersIn(t) { return (String(t || '').replace(/(\d),(?=\d{3}\b)/g, '$1').match(/\d+(?:[.:/]\d+)?/g) || []) }
+function unverifiedNumbers(draft, source) {
+  const src = new Set(numbersIn(source)), out = []
+  for (const n of numbersIn(draft)) {
+    if (/^\d+$/.test(n) && Number(n) <= 10) continue
+    if (src.has(n)) continue
+    if (/^\d+\.\d$/.test(n) && src.has(n + '0')) continue // 54.7 מול 54.70
+    if (/^\d+\.0$/.test(n) && src.has(n.slice(0, -2))) continue
+    if (!out.includes(n)) out.push(n)
+  }
+  return out
+}
 // 22.11.26: טיוטה שנדחתה למחר — מאפסים את השעון כדי שלא תפוג אחרי 36 שעות מהיצירה
 function touch(id) { const d = load(); if (d.items[id]) { d.items[id].at = new Date().toISOString(); save(d) } }
 function updateText(id, text) { const d = load(); if (d.items[id]) { d.items[id].text = stripEmoji(text); d.items[id].at = new Date().toISOString(); save(d) } }
 
-module.exports = { touch, pendingForPerson, variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }
+module.exports = { unverifiedNumbers, numbersIn, touch, pendingForPerson, variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }

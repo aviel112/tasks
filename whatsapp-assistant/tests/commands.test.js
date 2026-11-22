@@ -49,6 +49,19 @@ eq('resolve אודליה (בלי העדפה) = עמום', !!(d.resolveRef('או�
 eq('resolve מור', d.resolveRef('מור'), 590)
 // כל הטיוטות של אותו אדם
 eq('pendingForPerson אודליה', d.pendingForPerson('a@lid', '0500000001').map((x) => x.id).sort(), [572, 584])
+// שומר מספרים (מקרים אמיתיים מ-22.11)
+const src = 'משקל התחלה: 55.6 ק״ג · ממוצע 7 השקילות האחרונות: 54.7 · שקילה אחרונה: 53.9 · יעד 2,700 קלוריות · הוא כתב: מאמין שאסיים סביבות 15-16'
+eq('מספרים אמיתיים עוברים', d.unverifiedNumbers('התחלנו ב-55.6, עכשיו 54.7 והבוקר 53.9', src), [])
+eq('שעה שהומצאה נתפסת', d.unverifiedNumbers('סגור 15:30 יעבוד', src), ['15:30'])
+eq('אלפים עם פסיק', d.unverifiedNumbers('היעד שלך 2,700 ביום', src), [])
+eq('מספר קטן לא נבדק', d.unverifiedNumbers('3 אימונים השבוע', src), [])
+eq('משקל שהומצא נתפס', d.unverifiedNumbers('ירדת ל-52.1', src), ['52.1'])
+// פקודות בקול: התמלול עובר המרה ואז את אותו מנתח
+{ const isrc = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8'); const fsrc = isrc.slice(isrc.indexOf('function spokenToCommand'), isrc.indexOf('async function handleVoice')); eval(fsrc.replace('function spokenToCommand', 'var spokenToCommand = function'))
+  eq('קול: אחת אודליה', P(spokenToCommand('אחת אודליה.')), { type: 'send', ref: 'אודליה', option: 1 })
+  eq('קול: אודליה שתיים', P(spokenToCommand('אודליה שתיים')), { type: 'send', ref: 'אודליה', option: 2 })
+  eq('קול: ערוך שלוש', P(spokenToCommand('ערוך שלוש')), { type: 'edit', ref: null, option: 3 })
+  eq('קול: משפט רגיל לא נוגעים', spokenToCommand('תוסיף לעידו שלוש מאות קלוריות'), 'תוסיף לעידו שלוש מאות קלוריות') }
 fs.rmSync(tmp, { force: true })
 console.log(fail ? `${fail} בדיקות נכשלו` : 'כל הבדיקות עברו')
 process.exit(fail ? 1 : 0)

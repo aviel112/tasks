@@ -443,14 +443,14 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   const shown = /[\u0590-\u05FF]/.test(name) ? name : heb ? `${heb} (${name})` : name
   // ההקשר המלא: הסגנון של אביאל, התיק, ספר הכללים, תשובות קודמות במצבים דומים, תיקונים אחרונים, הלוח והשיחה
   const prefs = prefsText()
-  let answer
+  let answer, ctxText = '' // 22.11.26: מה שהטיוטה ראתה — לבדיקת המספרים
   if (!allowTools && api.available()) {
     // API: סגנון + ספר כללים + כללים קבועים ב-system (מטמון); תיק, לוח ושיחה ב-user
-    const context = await profiles.draftContext({ jid: who.chat_jid, name, lastClientText: who.content, extra: await boardContext(who), stableInSystem: true })
+    const context = await profiles.draftContext({ jid: who.chat_jid, name, lastClientText: who.content, extra: await boardContext(who), stableInSystem: true }); ctxText = context
     answer = await askBrainOnce(drafts.variablePrompt({ situation, name, context, extraRules }), config.draftModel || 'sonnet',
       { system: drafts.stableSystem({ voice: profiles.voiceGuide(), rules: profiles.rulesBook(), prefs }), label: 'draft' })
   } else {
-    const context = await profiles.draftContext({ jid: who.chat_jid, name, lastClientText: who.content, extra: [await boardContext(who), prefs && '--- כללים קבועים שאביאל ביקש (חובה) ---\n' + prefs].filter(Boolean).join('\n\n') })
+    const context = await profiles.draftContext({ jid: who.chat_jid, name, lastClientText: who.content, extra: [await boardContext(who), prefs && '--- כללים קבועים שאביאל ביקש (חובה) ---\n' + prefs].filter(Boolean).join('\n\n') }); ctxText = context
     answer = await askBrainOnce(drafts.buildPrompt({ situation, name, context, extraRules, allowTools }), config.draftModel || 'sonnet', { tools: allowTools, label: 'draft-tools' })
   }
   if (/(^|\n)\s*SKIP\s*$/i.test(answer.trim())) return false // SKIP בסוף גם אם המוח הסביר קודם
@@ -466,10 +466,15 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
     drafts.setBatch(id, { shown, said })
     return true
   }
+  // 22.11.26 (שומר מספרים): מספר בטיוטה שלא מופיע בשום מקור → שורת "לבדוק" מתחת לנוסחים
+  const srcAll = [ctxText, situation, extraRules, headline, saidFull, who.content].join(' ')
+  const unv = parsed ? [parsed.draft, parsed.alt, parsed.alt2].map((t, i) => ({ i: i + 1, n: t ? drafts.unverifiedNumbers(t, srcAll) : [] })).filter((x) => x.n.length) : []
+  const unvLine = unv.length ? '*לבדוק לפני ששולחים — מספר שלא מצאתי בנתונים:* ' + unv.map((x) => x.n.join(', ') + ` (נוסח ${x.i})`).join(' · ') : ''
+  if (unv.length) console.log('[guard] unverified', name, JSON.stringify(unv))
   const quoteBlock = saidFull ? saidFull.split('\n').map((l) => '> ' + l).join('\n') : ''
   const head = headline ? `*${shown}* ${headline}` : `*${shown}* כתב${parsed && parsed.risk === 'low' ? ' (שגרתי)' : parsed ? ' (לבדוק)' : ''}:`
   const lines = parsed
-    ? [head, quoteBlock, '', parsed.alt ? '*1.*' : '*התשובה שאשלח:*', parsed.draft, ...(parsed.alt ? ['', '*2.*', parsed.alt] : []), ...(parsed.alt2 ? ['', '*3.*', parsed.alt2] : []), '', drafts.approvalHint(id, heb || name, !!parsed.alt, !!parsed.alt2)]
+    ? [head, quoteBlock, '', parsed.alt ? '*1.*' : '*התשובה שאשלח:*', parsed.draft, ...(parsed.alt ? ['', '*2.*', parsed.alt] : []), ...(parsed.alt2 ? ['', '*3.*', parsed.alt2] : []), ...(unvLine ? ['', unvLine] : []), '', drafts.approvalHint(id, heb || name, !!parsed.alt, !!parsed.alt2)]
     : [head, quoteBlock, '', drafts.stripEmoji(answer)]
   if (id) { draftQueuePush(id, lines.join('\n'), config.owner, !hold && !!String(who.content || '').trim()); return true } // 22.11.26: הכל בתור, אחת בכל פעם; לקוח שכתב — לפני טיוטות יזומות
   let sent; try { sent = await client.sendMessage(config.owner, toWhatsApp(lines.join('\n'))) } catch (e) { if (id) drafts.remove(id); throw e } // בלי התראה אין טיוטה (אחרת היא חוסמת את הלקוח 36 שעות)
@@ -879,6 +884,7 @@ cron.schedule('30 10 * * 0-5', checkChurn, { timezone: 'Asia/Jerusalem' })
 // ── סיכום שבוע אישי: יום ראשון 10:00 — לכל מתאמן פעיל בלוח (בלי משפחה/בדיקה), לפי נתוני השבוע מהאפליקציה; אחת אחת עם 3 אופציות ──
 // 22.11.26 (אביאל): מחליף את "פתיחת שבוע" שנשענה רק על השיחה בווטסאפ ורק על מי שכתב לאחרונה
 const weekFacts = require('./week-facts')
+const proofStory = require('./proof-story') // 22.11.26: תמונת סטורי הוכחה
 async function weeklyCheckin(opts = {}) {
   markRan('checkin')
   if (!config.owner || !clientReady || !(await biz.bridgeAlive())) return
@@ -887,14 +893,14 @@ async function weeklyCheckin(opts = {}) {
   const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה') && (!opts.only || opts.only.includes(c.name)))
   if (!rows.length) return
   await client.sendMessage(config.owner, toWhatsApp(`*סיכום שבוע אישי*${opts.only ? ' (השלמה)' : ''} — מכינה הודעה ל-${rows.length} מתאמנים לפי הנתונים של השבוע. אחת בכל פעם: הבאה מגיעה רק אחרי שטיפלת בקודמת.`)).catch(() => {})
-  let made = 0; const skipped = [], proof = [], usage = []
+  let made = 0; const skipped = [], proof = [], usage = [], proofPeople = []
   for (const c of rows) {
     const phone = pn(c.phone), first = String(c.name).split(' ')[0]
     try {
       const jid = (await biz.chatForPhone(phone).catch(() => null)) || `${phone}@s.whatsapp.net`
       const f = await coachApi('dashboardWeekFacts', [c.name]).catch(() => null), noApp = (tags[c.name] || []).includes(weekFacts.NOAPP_TAG)
       usage.push({ first, f, seen: c.seen && c.seen.d, noApp })
-      const pr = noApp ? '' : weekFacts.proofLine(first, f); if (pr) proof.push(pr) // 22.11.26 (אביאל): סימון לסטורי הוכחה
+      const pr = noApp ? '' : weekFacts.proofLine(first, f); if (pr) { proof.push(pr); proofPeople.push({ name: c.name, first, f, jid, phone }) } // 22.11.26 (אביאל): סימון לסטורי הוכחה
       // 22.11.26 (אביאל: "הודעה אחת לכל מתאמן"): כל מה שפתוח לו (תשובה שלא ענית, חידוש, בקשת תמונה, תזכורת) נכנס לאותה הודעה, והטיוטות הישנות נמחקות
       const open = drafts.pendingForPerson(jid, phone)
       const openTxt = open.map((d) => d.clientText ? `${first} כתב/ה לאביאל ועוד לא קיבל/ה תשובה: "${String(d.clientText).slice(0, 300)}" (טיוטת התשובה שהוכנה: "${String(d.text).slice(0, 200)}")` : `הודעה שהבוט הכין ועוד לא נשלחה: "${String(d.text).slice(0, 300)}"`).join('\n')
@@ -913,6 +919,18 @@ async function weeklyCheckin(opts = {}) {
   if (opts.only) { try { const o = JSON.parse(fs.readFileSync(WKSUM_PATH, 'utf8')); o.items = o.items.filter((x) => !opts.only.includes(x.name)).concat(rows.map((c) => ({ name: c.name, first: String(c.name).split(' ')[0], phone: pn(c.phone) }))); fs.writeFileSync(WKSUM_PATH, JSON.stringify(o)) } catch {}
     return client.sendMessage(config.owner, toWhatsApp(`השלמת סיכום שבוע: ${made} טיוטות מוכנות.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : ''))).catch(() => {}) }
   try { fs.writeFileSync(WKSUM_PATH, JSON.stringify({ at: new Date().toISOString(), items: rows.map((c) => ({ name: c.name, first: String(c.name).split(' ')[0], phone: pn(c.phone) })) })) } catch (e) { console.error('[wksum]', e.message) }
+  // 22.11.26 (אביאל: "סטורי הוכחה מוכן"): לכל מי שבסימון — תמונת סטורי בלי שם + בקשת רשות מהמתאמן/ת, בתור (אחרי הסיכומים)
+  for (const p of proofPeople) {
+    try {
+      const fem = await advisor.femOf(p.phone, p.name), sd = proofStory.storyData(p.f); if (!sd) continue
+      const img = await proofStory.render({ ...sd, fem }, `proof-${p.phone}-${Date.now()}.png`)
+      const kg = Math.abs(p.f.diff) === 0.5 ? 'חצי קילו' : Math.abs(p.f.diff) + ' ק״ג', ex = p.f.up[0].ex
+      const t1 = fem ? `${p.first}, השבוע ${p.f.diff < 0 ? 'ירדת' : 'עלית'} ${kg} בממוצע ושברת שיא ב${ex}. אפשר לשים את זה בסטורי שלי? בלי שם ובלי תמונה שלך, רק המספרים` : `${p.first}, השבוע ${p.f.diff < 0 ? 'ירדת' : 'עלית'} ${kg} בממוצע ושברת שיא ב${ex}. אפשר לשים את זה בסטורי שלי? בלי שם ובלי תמונה שלך, רק המספרים`
+      const t3 = fem ? `${p.first}, אפשר להעלות את התוצאה של השבוע לסטורי? בלי שם` : `${p.first}, אפשר להעלות את התוצאה של השבוע לסטורי? בלי שם`
+      const id = drafts.add({ chat_jid: p.jid, phone: p.phone, name: p.name, alias: p.first, text: t1, alt: t3 })
+      draftQueuePush(id, `*${p.name}: סטורי הוכחה* (#${id})\nהתמונה מוכנה (בלי שם). אם ${fem ? 'היא מאשרת' : 'הוא מאשר'} — מעלים כמו שהיא.\n\n*1.*\n${t1}\n\n*2.*\n${t3}\n\n${drafts.approvalHint(id, p.first, true, false)}`, config.owner, false, img)
+    } catch (e) { console.error('[proof-story]', p.name, e.message) }
+  }
   const rep = weekFacts.usageReport(usage) // 22.11.26: סיום הסבב, הוכחות ומי משתמש במה — בהודעה אחת
   await client.sendMessage(config.owner, toWhatsApp(`סיכום שבוע: ${made} טיוטות מוכנות מתוך ${rows.length}, מגיעות אחת אחת.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : '') + (rep ? '\n\n' + rep : '') +
     (proof.length ? '\n\n*חומר לסטורי הוכחה* (התקדמו לפי המטרה וגם שברו שיא השבוע):\n' + proof.join('\n') + '\nלבקש אישור לפני שמפרסמים.' : ''))).catch(() => {})
@@ -923,8 +941,8 @@ async function weeklyCheckin(opts = {}) {
 const DQ_PATH = path.join(ROOT, 'draft-queue.json')
 const dqLoad = () => { try { return JSON.parse(fs.readFileSync(DQ_PATH, 'utf8')) } catch { return { cur: null, items: [], total: 0, shown: 0 } } }
 const dqSave = (q) => fs.writeFileSync(DQ_PATH, JSON.stringify(q))
-function draftQueuePush(id, text, to, front) { const q = dqLoad(); if (!q.items.length && !q.cur) { q.total = 0; q.shown = 0 }
-  const it = { id, text, to: to || config.owner }; if (front) { const k = q.items.findIndex((x) => !x.front); it.front = true; q.items.splice(k < 0 ? q.items.length : k, 0, it) } else q.items.push(it)
+function draftQueuePush(id, text, to, front, img) { const q = dqLoad(); if (!q.items.length && !q.cur) { q.total = 0; q.shown = 0 }
+  const it = { id, text, to: to || config.owner }; if (img) it.img = img; if (front) { const k = q.items.findIndex((x) => !x.front); it.front = true; q.items.splice(k < 0 ? q.items.length : k, 0, it) } else q.items.push(it)
   q.total++; dqSave(q); setTimeout(draftQueueTick, 500) }
 // "הבא" / "דלג": מעבירים את הנוכחית לסוף התור (היא נשארת פתוחה לאישור לפי שם או מספר)
 function draftQueueSkip() { const q = dqLoad(); if (!q.items.length && !q.cur) return false
@@ -954,7 +972,8 @@ async function draftQueueTick() {
           drafts.remove(it.id); q.total = Math.max(0, q.total - 1); console.log('[dq] dropped (already messaged):', d.name, it.id); continue } }
       if (!it.again) q.shown++
       const left = q.items.filter((x) => drafts.get(x.id) && !(x.notBefore && Date.now() < x.notBefore)).length
-      const sent = await client.sendMessage(it.to || config.owner, toWhatsApp(it.text + (left ? `\n\n_(עוד ${left} בתור · *הבא* = לדלג לבינתיים)_` : '')))
+      const cap = toWhatsApp(it.text + (left ? `\n\n_(עוד ${left} בתור · *הבא* = לדלג לבינתיים)_` : ''))
+      const sent = it.img && fs.existsSync(it.img) ? await client.sendMessage(it.to || config.owner, MessageMedia.fromFilePath(it.img), { caption: cap }) : await client.sendMessage(it.to || config.owner, cap) // 22.11.26: סטורי הוכחה — התמונה עם הטיוטה
       if (sent?.id?._serialized) drafts.setAlertMsgId(it.id, sent.id._serialized)
       offerDraft(it.id); q.cur = it.id; q.curAt = Date.now(); q.curText = it.text; q.curTo = it.to; break
     }
@@ -963,6 +982,39 @@ async function draftQueueTick() {
   } catch (e) { console.error('[dq]', e.message) } finally { dqBusy = false }
 }
 setInterval(draftQueueTick, 15 * 1000)
+
+// ── מעקב חידושים (22.11.26, אביאל: "מעקב חידושים במסך אחד"): שני 10:00 או "חידושים" — מי מסיים ב-30 יום, מה כבר נשלח, אם ענה, ומה הצעד הבא ──
+async function renewalBoard(force) {
+  markRan('renewboard')
+  if (!config.owner || !clientReady) return
+  const [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))])
+  let adv = {}; try { adv = JSON.parse(fs.readFileSync(path.join(ROOT, 'advisor-state.json'), 'utf8')).renewals || {} } catch {}
+  let sent = []; try { sent = JSON.parse(fs.readFileSync(path.join(ROOT, 'sent-log.json'), 'utf8')) } catch {}
+  const pn = (raw) => { let d = String(raw || '').replace(/\D/g, ''); if (d.startsWith('972')) return d; if (d.startsWith('0')) d = d.slice(1); return /^5\d{8}$/.test(d) ? '972' + d : '' }
+  const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && c.daysLeft !== '' && c.daysLeft != null && Number(c.daysLeft) <= 30 && Number(c.daysLeft) >= -7 && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה'))
+    .sort((a, b) => Number(a.daysLeft) - Number(b.daysLeft))
+  if (!rows.length) { if (force) await client.sendMessage(config.owner, toWhatsApp('*חידושים*: אף אחד לא מסיים ב-30 הימים הקרובים.')).catch(() => {}); return }
+  const dm = (iso) => { const d = new Date(iso); return `${d.getDate()}.${d.getMonth() + 1}` }
+  const L = [`*חידושים — 30 הימים הקרובים* (${rows.length})`, '']
+  for (const c of rows) {
+    const first = String(c.name).split(' ')[0], dl = Number(c.daysLeft), st = (adv[c.name] || {}).sent || {}
+    const stages = Object.entries(st).filter(([, v]) => /^\d{4}-/.test(v)).sort((a, b) => a[1] < b[1] ? -1 : 1)
+    const firstStage = stages[0] && stages[0][1]
+    const RENEW_RE = /התהליך (שלנו )?נגמר|ממשיכים|למבנה של 3 חודשים|להמשיך איתי|חידוש|נשאר לנו|מסיימ/ // רק הודעת חידוש אמיתית, לא כל הודעה
+    const mine = sent.filter((x) => x.name === c.name && RENEW_RE.test(String(x.text || '')) && Date.now() - Date.parse(x.at) < 40 * 864e5)
+    let replied = null
+    if (mine.length) { try { const jid = mine[mine.length - 1].chat_jid || (await biz.chatForPhone(pn(c.phone))); replied = (await biz.inboundSince(jid, mine[mine.length - 1].at)).length > 0 } catch {} }
+    const bal = Number(c.balance) || 0, fem = await advisor.femOf(pn(c.phone), c.name).catch(() => false)
+    const next = bal > 0 ? `יתרה פתוחה ${bal.toLocaleString('en-US')} ₪ — קודם התשלום`
+      : !mine.length && !stages.length ? (dl > 14 ? 'הודעת החידוש יוצאת לבד 14 יום לפני' : 'עוד לא נשלחה הודעת חידוש — לשלוח היום')
+      : !mine.length ? 'הודעת חידוש הוכנה אבל עוד לא נשלחה — ממתינה בתור או בוטלה'
+      : replied ? `הודעת חידוש יצאה ב-${dm(mine[mine.length - 1].at)} ומאז ${fem ? 'היא כתבה' : 'הוא כתב'} — לבדוק אם נסגר (600 × 3)`
+      : `הודעת חידוש יצאה ב-${dm(mine[mine.length - 1].at)} ${fem ? 'והיא לא ענתה' : 'והוא לא ענה'} — שווה שיחת טלפון`
+    L.push(`*${first}* · ${dl < 0 ? `נגמר לפני ${-dl} ימים` : dl === 0 ? 'נגמר היום' : dl === 1 ? `נגמר מחר (${dm(c.end)})` : `עוד ${dl} ימים (${dm(c.end)})`}`, `  ${next}`)
+  }
+  await client.sendMessage(config.owner, toWhatsApp(L.join('\n'))).catch(() => {})
+}
+cron.schedule('0 10 * * 1', () => renewalBoard(false), { timezone: 'Asia/Jerusalem' })
 
 // ── מעקב שלישי 11:00 (22.11.26, אביאל): מי שקיבל סיכום שבוע ולא ענה → הודעת המשך קצרה, כולם בהודעה אחת עם "כן לכולם" ──
 const WKSUM_PATH = path.join(ROOT, 'weekly-sum.json')
@@ -1736,6 +1788,7 @@ function onIncoming(msg) {
     // "כן שון" רק אם באמת יש תשובה ממתינה לשון; אחרת זו שיחה רגילה עם העוזרת ("כן אני מגיע מחר")
     // כמה אישורים בהודעה אחת: "כן רון, כן שון, לא יובל" — כל אחד נבדק ונשלח בנפרד
     if (/^(הבא|דלג)$/.test(String(text || '').trim()) && draftQueueSkip()) return
+    if (/^חידושים$/.test(String(text || '').trim())) { queue = queue.then(() => renewalBoard(true)).catch((e) => console.error('[renewboard]', e)); return } // 22.11.26
     { const all = String(text || '').trim().match(/^(כן|שלח|שלחי|לא|בטל|בטלי) לכולם$/), ids = all ? (() => { const a = advisor.nudgeBatchInfo(), b = followBatchInfo(); const use = b && (!a || Date.parse(b.at) > Date.parse(a.at)) ? b.ids : advisor.nudgeBatchIds(); return use.filter((i) => drafts.get(i)) })() : [] // 21.11.26: תזכורות המתאמנים מגיעות בהודעה אחת
       if (all && ids.length) { const yes = /^(כן|שלח|שלחי)$/.test(all[1]), acc = []
         if (!yes) { ids.forEach((i) => drafts.remove(i)); client.sendMessage(config.owner, toWhatsApp('בוטל. ' + ids.length + ' הודעות לא נשלחו.')).catch(() => {}); return }
@@ -1927,6 +1980,14 @@ async function reviseDraft(id, instruction) {
   offerDraft(id)
 }
 
+// 22.11.26: מספרים במילים בתחילת פקודה קולית ("אחת אודליה" → "1 אודליה"), נקודה בסוף מהתמלול יורדת
+function spokenToCommand(t) {
+  const W = { 'אחת': '1', 'אחד': '1', 'שתיים': '2', 'שניים': '2', 'שתים': '2', 'שלוש': '3', 'שלושה': '3' }
+  let s = String(t || '').trim().replace(/[.!?,]+$/, '').replace(/\s+/g, ' ')
+  s = s.replace(/^(כן |ערוך )?(אחת|אחד|שתיים|שניים|שתים|שלוש|שלושה)(?= |$)/, (m, pre, w) => (pre || '') + W[w])
+  s = s.replace(/ (אחת|אחד|שתיים|שניים|שתים|שלוש|שלושה)$/, (m, w) => ' ' + W[w])
+  return s
+}
 async function handleVoice(msg) {
   // הקלטה כתשובה להתראה = הוראת תיקון לטיוטה
   if (msg.hasQuotedMsg && voiceReady()) {
@@ -1946,8 +2007,11 @@ async function handleVoice(msg) {
   try {
     const text = await transcribeVoice(msg)
     if (!text) throw new Error('empty transcription')
-    await msg.reply(toWhatsApp('🎤 _שמעתי:_ "' + text.slice(0, 300) + '"')).catch(() => {})
-    await handle(msg, text)
+    const said = spokenToCommand(text)
+    await msg.reply(toWhatsApp('_שמעתי:_ "' + said.slice(0, 300) + '"')).catch(() => {})
+    // 22.11.26 (אביאל: "פקודות בקול"): ההקלטה עוברת באותו מסלול כמו הודעה כתובה — פקודות טיוטה, "הבא", "חידושים", פקודות מאמן
+    const pm = Object.create(msg); Object.defineProperties(pm, { body: { value: said }, type: { value: 'chat' }, hasMedia: { value: false } })
+    onIncoming(pm)
   } catch (e) {
     console.error('[voice]', e.message)
     await msg.reply(toWhatsApp('לא הצלחתי לשמוע את ההקלטה. נסה שוב, או כתוב לי.')).catch(() => {})
@@ -2184,6 +2248,7 @@ const CATCHUP = [
   ['churn', 10 * 60 + 30, 19 * 60, [0, 1, 2, 3, 4, 5], () => checkChurn()],
   ['checkin', 10 * 60, 15 * 60, [0], () => weeklyCheckin()],
   ['wkfollow', 11 * 60, 18 * 60, [2], () => weeklyFollowup()],
+  ['renewboard', 10 * 60, 18 * 60, [1], () => renewalBoard(false)],
   ['reels', 10 * 60, 18 * 60, [0], () => weeklyScripts()],
   ['friday', 12 * 60 + 30, 17 * 60, [5], () => fridayReport()],
   ['weekrep', 8 * 60 + 5, 14 * 60, [0], () => weekClientsReport()],
