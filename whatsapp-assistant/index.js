@@ -574,6 +574,7 @@ const unmarkNudged = (w, prev) => { const n = loadNudged(); if (n[w.chat_jid] !=
 
 let waitingBusy = false, waitingPauseUntil = 0 // מגבלת שימוש — לא לנסות כל דקה
 // שני זמנים פנויים לשיחת היכרות — מתוך הבוקינג (מאושרים) והיומן האישי, בחלון שעות ברירת מחדל 10–20, לא בשבת
+const RESCHED_RE = /(?:להזיז|לדחות|להקדים|לשנות|לתאם מחדש)\s+(?:את\s+)?(?:ה)?(?:אימון|פגישה|שעה)|(?:אפשר|נוכל|אפשרי)\s+(?:לעשות\s+)?(?:את\s+)?(?:האימון\s+)?(?:מחר|ביום|בשעה)\s+\S+\s+במקום|לא\s+(?:אוכל|אצליח|אספיק)\s+להגיע|לא\s+(?:יכול|יכולה)\s+להגיע|אפשר\s+(?:לזוז|להזיז|לדחות)/
 async function freeSlots({ days = 3, from = Number(config.leadCallFrom) || 10, to = Number(config.leadCallTo) || 20 } = {}) {
   let bookings = []
   try {
@@ -750,6 +751,7 @@ async function checkWaitingClients() {
       // ליד שמתעניין (מחיר/להתחיל) — להציע שיחת היכרות עם שני זמנים פנויים אמיתיים
       const leadHot = !allowedQ && LEAD_HOT_RE.test(streak) && (await biz.messageCount(w.chat_jid).catch(() => 99)) < 40
       const slots = leadHot ? await freeSlots().catch(() => []) : []
+      const resched = !leadHot && !allowedQ && RESCHED_RE.test(streak), rslots = resched ? await freeSlots({ days: 3 }).catch(() => []) : [] // 22.11.26 (אביאל: "זיהוי בקשה להזיז אימון")
       const distress = DISTRESS_RE.test(streak), pain = PAIN_RE.test(streak)
       if (CRISIS_RE.test(streak)) { await crisisAlert(w); continue } // בלי טיוטה רגילה להודעת משבר
       let progNote = ''; if (pain) { try { const nm = (await coachOps.findName(biz.nameOf(w))) || {}; const pi = nm.name ? await coachOps.programInfo(nm.name) : null; if (pi && !pi.hasNote) progNote = `\nהתוכנית באפליקציה${pi.date ? ' מ-' + pi.date : ''} בלי הערה על הכאב. אם צריך: "תוסיף ל${nm.name.split(' ')[0]} בתוכנית הערה: ..."` } catch (e) {} }
@@ -772,8 +774,8 @@ async function checkWaitingClients() {
         batchable: !leadHot && !allowedQ && !fileQ && !photoNote && !distress && !pain,
         allowTools: allowedQ || fileQ || !!photoNote, // תמונה = המוח צריך Read כדי לראות אותה
         situation: `מתאמן/ליד כתב לווטסאפ העסקי של אביאל ב-${ISR_TIME(w.timestamp)}.` + (allowedQ ? ' זו שאלה של "מותר לי?" / "אפשר לאכול?".' : '') + (photoNote && !allowedQ ? photoNote.replace('(מנה, כמות משוערת)', '(מה רואים בתמונה: צלחת, מסך, משקל, תוצאה — ולענות עליה עניינית, לא "התמונה לא מופיעה")') : ''),
-        headline: (leadHot ? `מתעניין: "${String(w.content || '').slice(0, 80)}" (לבדוק)` : distress ? '*נפילה / מצוקה* (לבדוק)' : '') + progNote,
-        extraRules: (distress ? DISTRESS_RULES + ' ' : '') + (fileQ
+        headline: (leadHot ? `מתעניין: "${String(w.content || '').slice(0, 80)}" (לבדוק)` : distress ? '*נפילה / מצוקה* (לבדוק)' : resched ? `רוצה להזיז אימון${rslots.length ? ' · פנוי ביומן: ' + rslots.join(', ') : ''}:` : '') + progNote,
+        extraRules: (distress ? DISTRESS_RULES + ' ' : '') + (resched ? (rslots.length ? `המתאמן/ת מבקש/ת להזיז אימון. שעות פנויות ביומן של אביאל: ${rslots.join(' או ')}. נוסח 1: להציע בדיוק את שתי האפשרויות האלה ולשאול מה מתאים. נוסח 2: לשאול איזה יום ושעה נוחים לו/ה. לא להמציא שעות אחרות. ` : 'המתאמן/ת מבקש/ת להזיז אימון. לשאול איזה יום ושעה נוחים לו/ה, בלי להציע שעה ספציפית. ') : '') + (fileQ
           ? 'המתאמן מבקש קובץ (תפריט/תוכנית). למצוא אותו ב-Google Drive: חיפוש בתיקיית המתאמנים (folder id 1BgKSHeNMxfePdv0A7D-ZOLZqn3SZqV9g) או לפי השם הפרטי + "תפריט"/"תוכנית", לבחור את העדכני ביותר, ולבדוק עם get_file_permissions שיש גישה למי שיש לו קישור. ' +
             'אם יש גישה — לשים בטיוטה שורה קצרה + הקישור (webViewLink). אם אין גישה או לא נמצא — טיוטה קצרה "שולח לך עכשיו" ובשורה הראשונה (מה הוא רוצה) לציין לאביאל: "הקובץ לא משותף/לא נמצא: <קישור או שם>". עד 4 קריאות כלים, קריאה בלבד.'
           : leadHot
@@ -1507,6 +1509,14 @@ groupAgents.init({ client, config, toWhatsApp })
 setInterval(() => coachCmd.names(), 36e5)
 // ── סוכן בוקר 09:30 (א׳–ו׳): מה שמחכה לאישור בדשבורד, אחד-אחד בווטסאפ (morning-agent.js) ──
 const morningAgent = require('./morning-agent')
+// 22.11.26 (אביאל בחר בסקר): תזכורת תוספים, ציון דרך, בדיקה אחרי אימון — טיוטות בתור, רק עם נתונים אמיתיים
+const care = require('./care')
+care.init({ coachApi, planOf: async (t) => { const r = await fetch(APP_EXEC + '?api=plan&t=' + encodeURIComponent(t)); const j = await r.json(); return j && j.ok ? j.r : null },
+  alertWithDraft, drafts, biz, today: () => ilDay(Date.now()), log: (...a) => console.error(...a) })
+const careRun = (fn, tag) => async () => { if (!config.owner || !clientReady || !(await biz.bridgeAlive())) return; try { const n = await care[fn](); if (n) console.log('[care]', tag, n) } catch (e) { console.error('[care]', tag, e.message) } }
+cron.schedule('30 10 * * 0-5', careRun('suppRefill', 'supp'), { timezone: 'Asia/Jerusalem' })
+cron.schedule('40 10 * * 0-5', careRun('milestones', 'mile'), { timezone: 'Asia/Jerusalem' })
+cron.schedule('45 20 * * 0-5', careRun('afterWorkout', 'wk'), { timezone: 'Asia/Jerusalem' })
 const coordAgent = require('./coord-agent') // 6.11.26: אירוע / יום בלי מכון מהאפליקציה → 2 הצעות → "אשר שם 1"
 coordAgent.init({ coachApi: (fn, args) => coachApi(fn, args), askBrainOnce, stripEmoji: (x) => drafts.stripEmoji(x), ready: () => !!(config.owner && clientReady), send: (t) => client.sendMessage(updGid() || config.owner, toWhatsApp(drafts.stripEmoji(t).trim())).catch(() => {}) })
 cron.schedule('1-59/3 * * * *', () => coordAgent.scan().catch((e) => console.error('[coord]', e.message)), { timezone: 'Asia/Jerusalem' })
