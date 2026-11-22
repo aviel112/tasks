@@ -821,5 +821,6 @@ function install(c) {
   log('installed')
 }
 
+const nudgeBatchInfo = () => { try { return loadState().nudgeBatch || null } catch (e) { return null } }
 const nudgeBatchIds = () => { try { const b = loadState().nudgeBatch; return b && Date.now() - Date.parse(b.at) < 36 * 3600e3 ? b.ids : [] } catch (e) { return [] } }
-module.exports = { nudgeBatchIds, askApproval, install, onDraftSent, registerLead, parseCloseCommand, handleCloseCommand, parseBotCommand, handleBotCommand, botsStatus, botsText, setBotEnabled, run, BOTS, dailyCloseList, ceoReport, readBoard, leadCloserTick, renewalsTick, proofTick, referralTick, callBriefTick, paymentTick, nudgeTick, reviewTick, storyTick }
+module.exports = { nudgeBatchInfo, nudgeBatchIds, askApproval, install, onDraftSent, registerLead, parseCloseCommand, handleCloseCommand, parseBotCommand, handleBotCommand, botsStatus, botsText, setBotEnabled, run, BOTS, dailyCloseList, ceoReport, readBoard, leadCloserTick, renewalsTick, proofTick, referralTick, callBriefTick, paymentTick, nudgeTick, reviewTick, storyTick }

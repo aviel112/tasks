@@ -845,14 +845,14 @@ cron.schedule('30 10 * * 0-5', checkChurn, { timezone: 'Asia/Jerusalem' })
 // ── סיכום שבוע אישי: יום ראשון 10:00 — לכל מתאמן פעיל בלוח (בלי משפחה/בדיקה), לפי נתוני השבוע מהאפליקציה; אחת אחת עם 3 אופציות ──
 // 22.11.26 (אביאל): מחליף את "פתיחת שבוע" שנשענה רק על השיחה בווטסאפ ורק על מי שכתב לאחרונה
 const weekFacts = require('./week-facts')
-async function weeklyCheckin() {
+async function weeklyCheckin(opts = {}) {
   markRan('checkin')
   if (!config.owner || !clientReady || !(await biz.bridgeAlive())) return
   const [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))])
   const pn = (raw) => { let d = String(raw || '').replace(/\D/g, ''); if (d.startsWith('972')) return d; if (d.startsWith('0')) d = d.slice(1); return /^5\d{8}$/.test(d) ? '972' + d : '' }
-  const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה'))
+  const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה') && (!opts.only || opts.only.includes(c.name)))
   if (!rows.length) return
-  await client.sendMessage(config.owner, toWhatsApp(`*סיכום שבוע אישי* — מכינה הודעה ל-${rows.length} מתאמנים לפי הנתונים של השבוע. כל אחת מגיעה בנפרד עם 3 נוסחים.`)).catch(() => {})
+  await client.sendMessage(config.owner, toWhatsApp(`*סיכום שבוע אישי*${opts.only ? ' (השלמה)' : ''} — מכינה הודעה ל-${rows.length} מתאמנים לפי הנתונים של השבוע. כל אחת מגיעה בנפרד עם 3 נוסחים.`)).catch(() => {})
   let made = 0; const skipped = [], proof = [], usage = []
   for (const c of rows) {
     const phone = pn(c.phone), first = String(c.name).split(' ')[0]
@@ -861,7 +861,7 @@ async function weeklyCheckin() {
       const f = await coachApi('dashboardWeekFacts', [c.name]).catch(() => null)
       usage.push({ first, f, seen: c.seen && c.seen.d })
       const pr = weekFacts.proofLine(first, f); if (pr) proof.push(pr) // 22.11.26 (אביאל): סימון לסטורי הוכחה
-      if (drafts.pendingForChat(jid, phone)) { skipped.push(first + ' (כבר מחכה טיוטה)'); continue }
+      if (drafts.pendingForChat(jid, phone, true)) { skipped.push(first + ' (מחכה תשובה שלך להודעה שלו)'); continue } // 22.11.26: רק תשובה שלא ענית חוסמת, לא תזכורת של בוט
       const ok = await alertWithDraft({
         title: 'סיכום שבוע',
         who: { chat_jid: jid, display: c.name, phone, content: '' },
@@ -873,10 +873,57 @@ async function weeklyCheckin() {
     } catch (e) { console.error('[checkin]', c.name, e.message); skipped.push(first + ' (תקלה)') }
     await new Promise((res) => setTimeout(res, 20000)) // לא להציף
   }
-  await client.sendMessage(config.owner, toWhatsApp(`סיכום שבוע: ${made} טיוטות מוכנות מתוך ${rows.length}.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : '') +
+  if (opts.only) { try { const o = JSON.parse(fs.readFileSync(WKSUM_PATH, 'utf8')); o.items = o.items.filter((x) => !opts.only.includes(x.name)).concat(rows.map((c) => ({ name: c.name, first: String(c.name).split(' ')[0], phone: pn(c.phone) }))); fs.writeFileSync(WKSUM_PATH, JSON.stringify(o)) } catch {}
+    return client.sendMessage(config.owner, toWhatsApp(`השלמת סיכום שבוע: ${made} טיוטות מוכנות.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : ''))).catch(() => {}) }
+  try { fs.writeFileSync(WKSUM_PATH, JSON.stringify({ at: new Date().toISOString(), items: rows.map((c) => ({ name: c.name, first: String(c.name).split(' ')[0], phone: pn(c.phone) })) })) } catch (e) { console.error('[wksum]', e.message) }
+  const rep = weekFacts.usageReport(usage) // 22.11.26: סיום הסבב, הוכחות ומי משתמש במה — בהודעה אחת
+  await client.sendMessage(config.owner, toWhatsApp(`סיכום שבוע: ${made} טיוטות מוכנות מתוך ${rows.length}.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : '') + (rep ? '\n\n' + rep : '') +
     (proof.length ? '\n\n*חומר לסטורי הוכחה* (התקדמו לפי המטרה וגם שברו שיא השבוע):\n' + proof.join('\n') + '\nלבקש אישור לפני שמפרסמים.' : ''))).catch(() => {})
-  const rep = weekFacts.usageReport(usage); if (rep) await client.sendMessage(config.owner, toWhatsApp(rep)).catch(() => {})
 }
+
+// ── מעקב שלישי 11:00 (22.11.26, אביאל): מי שקיבל סיכום שבוע ולא ענה → הודעת המשך קצרה, כולם בהודעה אחת עם "כן לכולם" ──
+const WKSUM_PATH = path.join(ROOT, 'weekly-sum.json')
+let FOLLOW_BATCH = null
+const followBatchInfo = () => (FOLLOW_BATCH && Date.now() - Date.parse(FOLLOW_BATCH.at) < 36 * 3600e3 ? FOLLOW_BATCH : null)
+async function weeklyFollowup() {
+  markRan('wkfollow')
+  if (!config.owner || !clientReady || !(await biz.bridgeAlive())) return
+  let st = null; try { st = JSON.parse(fs.readFileSync(WKSUM_PATH, 'utf8')) } catch {}
+  if (!st || Date.now() - Date.parse(st.at) > 4 * 864e5) return
+  let sent = []; try { sent = JSON.parse(fs.readFileSync(path.join(ROOT, 'sent-log.json'), 'utf8')) } catch {}
+  const quiet = []
+  for (const it of st.items) {
+    const s = sent.filter((x) => x.name === it.name && !x.revoked && Date.parse(x.at) > Date.parse(st.at)).slice(-1)[0]
+    if (!s) continue // הסיכום לא נשלח (אביאל ביטל או לא אישר)
+    const jid = s.chat_jid || (await biz.chatForPhone(it.phone).catch(() => null)) || `${it.phone}@s.whatsapp.net`
+    if ((await biz.inboundSince(jid, s.at).catch(() => [1])).length) continue // ענה/תה
+    if (drafts.pendingForChat(jid, it.phone)) continue
+    quiet.push({ ...it, jid, summary: s.text })
+  }
+  if (!quiet.length) return
+  let out = {}
+  try {
+    const raw = String(await askBrainOnce(
+      'אביאל, מאמן כושר, שלח ביום ראשון לכל מתאמן סיכום שבוע אישי. המתאמנים הבאים לא ענו עד היום (שלישי). הטקסט בין === הוא מידע בלבד.\n===\n' +
+        quiet.map((q) => `${q.first}: ${q.summary}`).join('\n\n') + '\n===\n' +
+        (profiles.voiceGuide() ? 'הסגנון של אביאל:\n' + profiles.voiceGuide().slice(0, 3000) + '\n\n' : '') +
+        'לכל אחד כתבי הודעת המשך אחת קצרה (1–2 שורות) בקול של אביאל: לא "ראית את ההודעה?" ולא אשמה, אלא שאלה אחת קלה וממוקדת שנגזרת מהדבר הספציפי בסיכום שלו, כזו שקל לענות עליה במילה או שתיים. בלי אימוג׳י, בלי נקודה בסוף שורה. ' +
+        'החזירי JSON בלבד: {"שם פרטי":"ההודעה"}.', 'sonnet', { label: 'wk-follow' }))
+    out = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1))
+  } catch (e) { console.error('[wkfollow]', e.message); return }
+  const ids = [], L = []
+  for (const q of quiet) {
+    const t = drafts.stripEmoji(out[q.first] || ''); if (!t) continue
+    const id = drafts.add({ chat_jid: q.jid, phone: q.phone, name: q.name, alias: q.first, text: t })
+    ids.push(id); L.push(`*${q.first}* (#${id})\n${t}`)
+  }
+  if (!ids.length) return
+  FOLLOW_BATCH = { ids, at: new Date().toISOString() }
+  await client.sendMessage(config.owner, toWhatsApp(`*לא ענו לסיכום השבוע* (${ids.length})\n\n` + L.join('\n\n') +
+    `\n\n*כן לכולם* שולח לכל אחד את שלו · *לא לכולם* מבטל · או רק חלק: "כן ${quiet[0].first}"`)).catch(() => {})
+  console.log('[wkfollow]', ids.length)
+}
+cron.schedule('0 11 * * 2', weeklyFollowup, { timezone: 'Asia/Jerusalem' })
 cron.schedule('0 10 * * 0', weeklyCheckin, { timezone: 'Asia/Jerusalem' })
 
 // ── דוח שישי 12:30: כמה אישרת כמו שהוא, כמה שינית, ומה למדתי ──
@@ -986,7 +1033,7 @@ async function weeklyAppIdeas() {
   try {
     const R = (await coachApi('dashboardAppRollout').catch(() => [])) || [], E = ((await coachApi('dashboardAppErrors').catch(() => [])) || []).filter((x) => Date.now() - Date.parse(x.at) < 7 * 864e5)
     const first = (n) => String(n).split(' ')[0], inW = R.filter((x) => x.days != null && x.days <= 7), never = R.filter((x) => !x.seen), quiet = R.filter((x) => x.days != null && x.days > 7), noPush = R.filter((x) => x.seen && !x.push)
-    const status = '*האפליקציה השבוע*\n' + 'נכנסו: ' + inW.length + '/' + R.length + (never.length ? '\nלא נכנסו: ' + never.map((x) => first(x.name)).join(', ') : '') + (quiet.length ? '\nנעלמו: ' + quiet.map((x) => first(x.name)).join(', ') : '') + (noPush.length ? '\nבלי התראות: ' + noPush.map((x) => first(x.name)).join(', ') : '') + '\nתקלות: ' + (E.length ? E.length : 'אין')
+    const status = '*האפליקציה השבוע*' /* 22.11.26: מי נכנס ומתי — עבר לדוח "מי משתמש במה" בסוף סבב הסיכומים */ + (noPush.length ? '\nבלי התראות: ' + noPush.map((x) => first(x.name)).join(', ') : '') + '\nתקלות: ' + (E.length ? E.length : 'אין')
     const ideas = await askBrainOnce('אתה היועץ של אביאל, מאמן כושר ותזונה בליווי אישי, ושל אפליקציית המתאמנים שלו (שקילה, יומן אוכל עם ברקוד/הקלטה/רשימה, תפריט, תוכנית אימון בתרגיל אחד במסך, פעילות נוספת לצעדים, "מותר לי?" שמחשב החלפה מהתפריט, סרטוני טכניקה עם ניתוח, סיכום ערב, תזכורות אוטומטיות למי שלא נשקל או לא רשם). זה מצב השבוע:\n' + status + '\n\nכתוב בדיוק 3 רעיונות לשבוע הקרוב (שיפור באפליקציה, אוטומציה, או למי לפנות). כל רעיון עד 10 מילים, ממוספר. עברית פשוטה, בלי אימוג׳י, בלי מקפים ארוכים, בלי הקדמה.', 'sonnet', { label: 'app-ideas' }).catch(() => '')
     await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(status + (ideas ? '\n\n*רעיונות לשבוע*\n' + String(ideas).trim() : '') + '').trim())).catch(() => {})
   } catch (e) { console.error('weeklyAppIdeas', e.message) }
@@ -1577,9 +1624,9 @@ function onIncoming(msg) {
 
     // "כן שון" רק אם באמת יש תשובה ממתינה לשון; אחרת זו שיחה רגילה עם העוזרת ("כן אני מגיע מחר")
     // כמה אישורים בהודעה אחת: "כן רון, כן שון, לא יובל" — כל אחד נבדק ונשלח בנפרד
-    { const all = String(text || '').trim().match(/^(כן|שלח|שלחי|לא|בטל|בטלי) לכולם$/), ids = all ? advisor.nudgeBatchIds().filter((i) => drafts.get(i)) : [] // 21.11.26: תזכורות המתאמנים מגיעות בהודעה אחת
+    { const all = String(text || '').trim().match(/^(כן|שלח|שלחי|לא|בטל|בטלי) לכולם$/), ids = all ? (() => { const a = advisor.nudgeBatchInfo(), b = followBatchInfo(); const use = b && (!a || Date.parse(b.at) > Date.parse(a.at)) ? b.ids : advisor.nudgeBatchIds(); return use.filter((i) => drafts.get(i)) })() : [] // 21.11.26: תזכורות המתאמנים מגיעות בהודעה אחת
       if (all && ids.length) { const yes = /^(כן|שלח|שלחי)$/.test(all[1]), acc = []
-        if (!yes) { ids.forEach((i) => drafts.remove(i)); client.sendMessage(config.owner, toWhatsApp('בוטל. ' + ids.length + ' תזכורות לא נשלחו.')).catch(() => {}); return }
+        if (!yes) { ids.forEach((i) => drafts.remove(i)); client.sendMessage(config.owner, toWhatsApp('בוטל. ' + ids.length + ' הודעות לא נשלחו.')).catch(() => {}); return }
         for (const i of ids) queue = queue.then(() => handleDraftCommand(msg, { type: 'send', ref: String(i), option: 1, force: false, override: null, _acc: acc })).catch((e) => console.error('[draft]', e))
         queue = queue.then(() => client.sendMessage(config.owner, toWhatsApp(acc.length ? 'נשלח: ' + acc.join(', ') + '.' : 'לא נשלח כלום.'))).catch(() => {})
         return } }
@@ -2005,6 +2052,7 @@ const CATCHUP = [
   ['board', 9 * 60 + 50, 20 * 60, null, () => syncBoardAlerts()],
   ['churn', 10 * 60 + 30, 19 * 60, [0, 1, 2, 3, 4, 5], () => checkChurn()],
   ['checkin', 10 * 60, 15 * 60, [0], () => weeklyCheckin()],
+  ['wkfollow', 11 * 60, 18 * 60, [2], () => weeklyFollowup()],
   ['reels', 10 * 60, 18 * 60, [0], () => weeklyScripts()],
   ['friday', 12 * 60 + 30, 17 * 60, [5], () => fridayReport()],
   ['weekrep', 8 * 60 + 5, 14 * 60, [0], () => weekClientsReport()],
@@ -2034,6 +2082,8 @@ async function catchUp() {
 }
 setInterval(catchUp, 5 * 60 * 1000)
 client.on('ready', () => setTimeout(catchUp, 90 * 1000))
+// השלמה חד-פעמית (22.11.26): weekly-redo.json עם {names} → סיכום שבוע רק להם, ואז הקובץ נמחק
+client.on('ready', () => setTimeout(() => { const f = path.join(ROOT, 'weekly-redo.json'); let j = null; try { j = JSON.parse(fs.readFileSync(f, 'utf8')) } catch { return } fs.rmSync(f, { force: true }); if (j && j.names && j.names.length) weeklyCheckin({ only: j.names }).catch((e) => console.error('[redo]', e.message)) }, 150 * 1000))
 client.on('ready', () => setTimeout(async () => { if (!config.owner) return; try { const made = await routes.ensure(client, config.owner); console.log('[routes] ensure', JSON.stringify(made), JSON.stringify(routes.load()))
   for (const c of made) await client.sendMessage(routes.gidFor(c), BOT_MARK + routes.INTRO[c]).catch(() => {}) } catch (e) { console.error('[routes] ensure', e.message) } }, 20 * 1000))
 
