@@ -73,8 +73,14 @@ const client = new Client({
 })
 const routes = require('./routes') // 19.11.26: פיצול ההודעות לאביאל ל-3 קבוצות (מתאמנים / עסק / אישי)
 let ROUTE_REPLY = { gid: '', until: 0 } // אחרי הודעה של אביאל בקבוצה: 3 דקות שבהן המענה חוזר לאותה קבוצה
+// 22.11.26 (אביאל: "אל תשלח יותר הודעות על מתאמנים בפרטי, רק בקבוצה"): כל הודעה לאביאל שמזכירה מתאמן בשם → קבוצת המתאמנים
+let TRAINEE_RE = null
+async function refreshTraineeNames() { try { const l = await coachApi('dashboardList'); const ns = new Set(); for (const c of (l && l.clients) || []) { const n = String(c.name || '').trim(); if (!n) continue; ns.add(n); const f = n.split(' ')[0]; if (f.length >= 3) ns.add(f) }
+  if (ns.size) TRAINEE_RE = new RegExp('(^|[^\u0590-\u05FF])[ולב]?(' + [...ns].sort((a, b) => b.length - a.length).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?=$|[^\u0590-\u05FF])') } catch (e) { console.error('[trainee-names]', e.message) } }
+setTimeout(refreshTraineeNames, 5000); setInterval(refreshTraineeNames, 30 * 60 * 1000)
+const aboutTrainee = (t) => !!(TRAINEE_RE && TRAINEE_RE.test(String(t || '')))
 { const _send = client.sendMessage.bind(client); client.sendMessage = (to, ...r) => { let dest = to
-    try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); dest = routes.gidFor(routes.classify(txt)) || to } } } catch (e) { dest = to }
+    try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); let cat = routes.classify(txt); if ((!cat || cat === 'biz') && aboutTrainee(txt) && !/^\*?(ליד|5 לסגור)/.test(txt.replace(/^[\u200b\s]+/, ''))) cat = 'coach'; dest = routes.gidFor(cat) || to } } } catch (e) { dest = to }
     return _send(dest, ...r).catch((e) => { if (dest !== to) { console.error('[routes] group send failed, falling back', e.message); return _send(to, ...r) } throw e }) } } // 5.11.26 מענה בקבוצת העדכונים
 
 // ── פעולות אמיתיות שהמוח מבקש בפורמט מובנה (לא קוד חופשי) ──
@@ -824,7 +830,10 @@ async function checkChurn() {
   let st = {}
   try { st = JSON.parse(fs.readFileSync(CHURN_PATH, 'utf8')) } catch {}
   const rows = await biz.cadence(60).catch(() => [])
+  // 22.11.26 (אביאל על רון פרטוק: "לקוח עבר"): שקט חריג רק למתאמנים פעילים בלוח, בלי משפחה/בדיקה
+  let act = null; try { const [l, tg] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))]); act = new Set(((l && l.clients) || []).filter((c) => c.status === 'פעיל' && !(tg[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה')).map((c) => String(c.phone || '').replace(/\D/g, '').slice(-9)).filter(Boolean)) } catch (e) { console.error('[churn] board', e.message); return }
   for (const r of rows) {
+    if (!act.has(String(r.phone || '').replace(/\D/g, '').slice(-9))) continue
     if (r.active_days < 5 || !r.avg_gap) continue // אין מספיק היסטוריה כדי לדעת מה "רגיל" אצלו
     const threshold = Math.max(3, r.avg_gap * 2.5)
     if (r.silent_days < threshold || r.silent_days > 21) continue
@@ -1462,9 +1471,40 @@ let queue = Promise.resolve()
 // עובד גם כשאביאל כותב מהטלפון המקושר (fromMe) וגם מהטלפון השני — אותו צ'אט.
 const chatIdOf = (msg) => (msg.fromMe ? msg.to : msg.from)
 
+// 22.11.26 (אביאל: "למה זה נתקע" — "1 מור" נכתב בזמן אתחול ואבד): כל הודעה שעובדה נרשמת, ואחרי אתחול
+// קוראים מחדש את ההודעות של אביאל מ-20 הדקות האחרונות בצ'אט שלו ובקבוצות, ומעבדים רק את מה שלא עובד
+const MSEEN_PATH = path.join(ROOT, 'seen-msgs.json')
+let MSEEN = {}, MSEEN_FIRST = !fs.existsSync(MSEEN_PATH); try { MSEEN = JSON.parse(fs.readFileSync(MSEEN_PATH, 'utf8')) } catch {}
+let seenDirty = false
+const markSeen = (msg) => { const id = msg && msg.id && msg.id._serialized; if (!id || MSEEN[id]) return; MSEEN[id] = msg.timestamp || Math.floor(Date.now() / 1000); seenDirty = true }
+setInterval(() => { if (!seenDirty) return; seenDirty = false; const cut = Date.now() / 1000 - 2 * 86400; for (const k of Object.keys(MSEEN)) if (MSEEN[k] < cut) delete MSEEN[k]; try { fs.writeFileSync(MSEEN_PATH, JSON.stringify(MSEEN)) } catch {} }, 5000)
+async function recoverMissed() {
+  if (!config.owner) return
+  { const q = dqLoad(); if (q.cur && drafts.get(q.cur)) offerDraft(q.cur) } // "1" אחרי אתחול = הטיוטה שמוצגת עכשיו
+  const ids = [config.owner, updGid()]; try { const r = JSON.parse(fs.readFileSync(path.join(ROOT, 'routes.json'), 'utf8')); ['personal', 'biz', 'coach'].forEach((k) => r[k] && ids.push(r[k])) } catch {}
+  const since = Date.now() / 1000 - 20 * 60; let n = 0
+  for (const id of [...new Set(ids.filter(Boolean))]) {
+    try {
+      const chat = await client.getChatById(id), msgs = await chat.fetchMessages({ limit: 20 })
+      for (const m of msgs) {
+        if (!m || m.timestamp < since || MSEEN[m.id && m.id._serialized] || m.fromMe) continue
+        if (!(m.from === config.owner || m.author === config.owner)) continue
+        if (String(m.body || '').startsWith(BOT_MARK)) continue
+        if (MSEEN_FIRST) { markSeen(m); continue } // ריצה ראשונה של הגרסה: רק מסמנים, לא מעבדים שוב
+        console.log('[recover] missed during restart:', String(m.body || '').slice(0, 40)); n++
+        onIncoming(m)
+      }
+    } catch (e) { console.error('[recover]', id, e.message) }
+  }
+  if (n) client.sendMessage(config.owner, toWhatsApp(`חזרתי מאתחול וטיפלתי ב-${n} ${n === 1 ? 'הודעה שכתבת' : 'הודעות שכתבת'} בזמן שהייתי למטה.`)).catch(() => {})
+}
+client.on('ready', () => setTimeout(() => recoverMissed().catch((e) => console.error('[recover]', e.message)), 25 * 1000))
+
 function onIncoming(msg) {
   try {
+    markSeen(msg)
     const cid = chatIdOf(msg)
+    if (config.owner && cid === config.owner && !msg.fromMe) { try { fs.writeFileSync(path.join(ROOT, 'last-owner-msg.json'), JSON.stringify({ at: Date.now() })) } catch {} } // safe-restart.sh מחכה ל-5 דקות שקט
     const text = (msg.body || '').trim()
     // לוג רק לצ'אט של אביאל עם העוזרת — לא לרשום תוכן משיחות פרטיות אחרות
     if (config.owner && cid === config.owner) {

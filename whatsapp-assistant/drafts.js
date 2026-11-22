@@ -3,7 +3,7 @@
 const fs = require('fs')
 const path = require('path')
 
-const PENDING_PATH = path.join(__dirname, 'pending-drafts.json')
+const PENDING_PATH = process.env.DRAFTS_PENDING_PATH || path.join(__dirname, 'pending-drafts.json') // בדיקות: קובץ זמני
 const BRIDGE_SEND = 'http://127.0.0.1:8080/api/send'
 const MAX_AGE_MS = 36 * 60 * 60 * 1000
 
