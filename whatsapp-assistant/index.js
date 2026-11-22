@@ -1072,6 +1072,10 @@ async function unansweredQuestions() {
 }
 cron.schedule('20 9 * * 0-5', unansweredQuestions, { timezone: 'Asia/Jerusalem' })
 
+// 22.11.26: הודעות מקלוד קוד (הצעות לשיפור, דוח בנייה) — קובץ טקסט בתיקיית say-inbox נשלח לאביאל ונמחק
+setInterval(() => { if (!config.owner || !clientReady) return; try { const dir = path.join(ROOT, 'say-inbox'); if (!fs.existsSync(dir)) return
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.txt')).sort()) { const fp = path.join(dir, f), t = fs.readFileSync(fp, 'utf8').trim(); fs.rmSync(fp); if (t) client.sendMessage(config.owner, toWhatsApp(t)).catch(() => {}) } } catch (e) { console.error('[say-inbox]', e.message) } }, 60 * 1000)
+
 // ── מעקב שלישי 11:00 (22.11.26, אביאל): מי שקיבל סיכום שבוע ולא ענה → הודעת המשך קצרה, כולם בהודעה אחת עם "כן לכולם" ──
 const WKSUM_PATH = path.join(ROOT, 'weekly-sum.json')
 let FOLLOW_BATCH = null
@@ -1851,6 +1855,9 @@ function onIncoming(msg) {
     // "כן שון" רק אם באמת יש תשובה ממתינה לשון; אחרת זו שיחה רגילה עם העוזרת ("כן אני מגיע מחר")
     // כמה אישורים בהודעה אחת: "כן רון, כן שון, לא יובל" — כל אחד נבדק ונשלח בנפרד
     if (/^(הבא|דלג)$/.test(String(text || '').trim()) && draftQueueSkip()) return
+    { const mp = String(text || '').trim().match(/^(?:הצעה|הצעות|תבנה(?: את)?(?: הצעה)?|לבנות)\s+([1-3](?:\s*(?:,|ו|\s)\s*[1-3])*)$/) // 22.11.26: בחירה מתוך "הצעות לשיפור" — נרשם, וקלוד קוד בונה בערב
+      if (mp) { const picks = [...new Set(mp[1].match(/[1-3]/g).map(Number))]; let prop = null; try { prop = JSON.parse(fs.readFileSync(path.join(ROOT, 'brain', 'improve-proposals.json'), 'utf8')) } catch {}
+        if (prop && prop.items) { prop.picks = picks; prop.pickedAt = new Date().toISOString(); fs.writeFileSync(path.join(ROOT, 'brain', 'improve-proposals.json'), JSON.stringify(prop, null, 1)); client.sendMessage(config.owner, toWhatsApp(`*הצעות לשיפור*: רשמתי ${picks.map((n) => n + ' (' + String((prop.items[n - 1] || {}).t || '').slice(0, 40) + ')').join(', ')}. נבנה הערב ב-20:30, ואעדכן.`)).catch(() => {}); return } } }
     if (/^חידושים$/.test(String(text || '').trim())) { queue = queue.then(() => renewalBoard(true)).catch((e) => console.error('[renewboard]', e)); return } // 22.11.26
     { const all = String(text || '').trim().match(/^(כן|שלח|שלחי|לא|בטל|בטלי) לכולם$/), ids = all ? (() => { const a = advisor.nudgeBatchInfo(), b = followBatchInfo(); const use = b && (!a || Date.parse(b.at) > Date.parse(a.at)) ? b.ids : advisor.nudgeBatchIds(); return use.filter((i) => drafts.get(i)) })() : [] // 21.11.26: תזכורות המתאמנים מגיעות בהודעה אחת
       if (all && ids.length) { const yes = /^(כן|שלח|שלחי)$/.test(all[1]), acc = []
