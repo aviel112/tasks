@@ -427,7 +427,7 @@ setTimeout(checkApartmentReport, 60 * 1000) // ריצה ראשונה קצת אח
 const ISR_TIME = (ts) => new Date(ts).toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' })
 
 // מנסח טיוטה, שומר אותה עם מספר, ושולח לאביאל התראה. מחזיר false אם המוח קבע שאין צורך לענות.
-async function alertWithDraft({ title, who, situation, extraRules = '', headline = '', allowTools = false, batchable = false }) {
+async function alertWithDraft({ title, who, situation, extraRules = '', headline = '', allowTools = false, batchable = false, hold = false }) {
   const name = biz.nameOf(who)
   const heb = await profiles.hebrewFirstName(name).catch(() => '')
   const shown = /[\u0590-\u05FF]/.test(name) ? name : heb ? `${heb} (${name})` : name
@@ -461,6 +461,7 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   const lines = parsed
     ? [head, quoteBlock, '', parsed.alt ? '*1.*' : '*התשובה שאשלח:*', parsed.draft, ...(parsed.alt ? ['', '*2.*', parsed.alt] : []), ...(parsed.alt2 ? ['', '*3.*', parsed.alt2] : []), '', drafts.approvalHint(id, heb || name, !!parsed.alt, !!parsed.alt2)]
     : [head, quoteBlock, '', drafts.stripEmoji(answer)]
+  if (hold && id) { draftQueuePush(id, lines.join('\n')); return true } // 22.11.26: בתור — יוצג אחרי שאביאל סיים עם הקודם
   let sent; try { sent = await client.sendMessage(config.owner, toWhatsApp(lines.join('\n'))) } catch (e) { if (id) drafts.remove(id); throw e } // בלי התראה אין טיוטה (אחרת היא חוסמת את הלקוח 36 שעות)
   if (id && sent?.id?._serialized) drafts.setAlertMsgId(id, sent.id._serialized)
   if (id) offerDraft(id)
@@ -852,7 +853,7 @@ async function weeklyCheckin(opts = {}) {
   const pn = (raw) => { let d = String(raw || '').replace(/\D/g, ''); if (d.startsWith('972')) return d; if (d.startsWith('0')) d = d.slice(1); return /^5\d{8}$/.test(d) ? '972' + d : '' }
   const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה') && (!opts.only || opts.only.includes(c.name)))
   if (!rows.length) return
-  await client.sendMessage(config.owner, toWhatsApp(`*סיכום שבוע אישי*${opts.only ? ' (השלמה)' : ''} — מכינה הודעה ל-${rows.length} מתאמנים לפי הנתונים של השבוע. כל אחת מגיעה בנפרד עם 3 נוסחים.`)).catch(() => {})
+  await client.sendMessage(config.owner, toWhatsApp(`*סיכום שבוע אישי*${opts.only ? ' (השלמה)' : ''} — מכינה הודעה ל-${rows.length} מתאמנים לפי הנתונים של השבוע. אחת בכל פעם: הבאה מגיעה רק אחרי שטיפלת בקודמת.`)).catch(() => {})
   let made = 0; const skipped = [], proof = [], usage = []
   for (const c of rows) {
     const phone = pn(c.phone), first = String(c.name).split(' ')[0]
@@ -868,18 +869,44 @@ async function weeklyCheckin(opts = {}) {
         headline: 'סיכום שבוע' + (weekFacts.hasData(f) ? '\n' + weekFacts.factsLine(f) : '\nאין נתונים מהשבוע באפליקציה'),
         situation: weekFacts.situation(first, f),
         extraRules: weekFacts.RULES,
+        hold: true,
       })
       if (ok) made++; else skipped.push(first)
     } catch (e) { console.error('[checkin]', c.name, e.message); skipped.push(first + ' (תקלה)') }
-    await new Promise((res) => setTimeout(res, 20000)) // לא להציף
   }
   if (opts.only) { try { const o = JSON.parse(fs.readFileSync(WKSUM_PATH, 'utf8')); o.items = o.items.filter((x) => !opts.only.includes(x.name)).concat(rows.map((c) => ({ name: c.name, first: String(c.name).split(' ')[0], phone: pn(c.phone) }))); fs.writeFileSync(WKSUM_PATH, JSON.stringify(o)) } catch {}
     return client.sendMessage(config.owner, toWhatsApp(`השלמת סיכום שבוע: ${made} טיוטות מוכנות.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : ''))).catch(() => {}) }
   try { fs.writeFileSync(WKSUM_PATH, JSON.stringify({ at: new Date().toISOString(), items: rows.map((c) => ({ name: c.name, first: String(c.name).split(' ')[0], phone: pn(c.phone) })) })) } catch (e) { console.error('[wksum]', e.message) }
   const rep = weekFacts.usageReport(usage) // 22.11.26: סיום הסבב, הוכחות ומי משתמש במה — בהודעה אחת
-  await client.sendMessage(config.owner, toWhatsApp(`סיכום שבוע: ${made} טיוטות מוכנות מתוך ${rows.length}.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : '') + (rep ? '\n\n' + rep : '') +
+  await client.sendMessage(config.owner, toWhatsApp(`סיכום שבוע: ${made} טיוטות מוכנות מתוך ${rows.length}, מגיעות אחת אחת.` + (skipped.length ? ' בלי טיוטה: ' + skipped.join(', ') + '.' : '') + (rep ? '\n\n' + rep : '') +
     (proof.length ? '\n\n*חומר לסטורי הוכחה* (התקדמו לפי המטרה וגם שברו שיא השבוע):\n' + proof.join('\n') + '\nלבקש אישור לפני שמפרסמים.' : ''))).catch(() => {})
 }
+
+// ── תור טיוטות (22.11.26, אביאל: "אתה שולח הכל רצוף... רק כשאני מתייחס לאחד תמשיך לשלוח למתאמן אחר"):
+// טיוטות הסבב נשמרות בתור, ומוצגת אחת בכל פעם. הבאה עולה רק כשהנוכחית נשלחה / בוטלה / נענתה בעצמו
+const DQ_PATH = path.join(ROOT, 'draft-queue.json')
+const dqLoad = () => { try { return JSON.parse(fs.readFileSync(DQ_PATH, 'utf8')) } catch { return { cur: null, items: [], total: 0, shown: 0 } } }
+const dqSave = (q) => fs.writeFileSync(DQ_PATH, JSON.stringify(q))
+function draftQueuePush(id, text) { const q = dqLoad(); if (!q.items.length && !q.cur) { q.total = 0; q.shown = 0 } q.items.push({ id, text }); q.total++; dqSave(q) }
+let dqBusy = false
+async function draftQueueTick() {
+  if (dqBusy || !config.owner || !clientReady) return
+  const q = dqLoad(); if (q.cur && drafts.get(q.cur)) return // אביאל עוד לא טיפל בנוכחית
+  if (!q.cur && !q.items.length) return
+  dqBusy = true
+  try {
+    q.cur = null
+    while (q.items.length) {
+      const it = q.items.shift(); if (!drafts.get(it.id)) continue // בוטלה או נענתה בינתיים
+      q.shown++
+      const sent = await client.sendMessage(config.owner, toWhatsApp(it.text + `\n\n_(${q.shown} מתוך ${q.total}${q.items.length ? ', הבא אחרי שתטפל בזה' : ', האחרון'})_`))
+      if (sent?.id?._serialized) drafts.setAlertMsgId(it.id, sent.id._serialized)
+      offerDraft(it.id); q.cur = it.id; break
+    }
+    dqSave(q)
+  } catch (e) { console.error('[dq]', e.message) } finally { dqBusy = false }
+}
+setInterval(draftQueueTick, 15 * 1000)
 
 // ── מעקב שלישי 11:00 (22.11.26, אביאל): מי שקיבל סיכום שבוע ולא ענה → הודעת המשך קצרה, כולם בהודעה אחת עם "כן לכולם" ──
 const WKSUM_PATH = path.join(ROOT, 'weekly-sum.json')
