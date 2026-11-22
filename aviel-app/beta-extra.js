@@ -1556,7 +1556,7 @@ document.addEventListener('click',function(e){ var t=e.target.closest&&e.target.
 phGate=function(){ var g=document.getElementById('phGate'), dn=phDone(), sn=+ls('aviel_ph_gate','0')||0;
   var need=D&&D.photoDue&&FEAT('photos')&&dn.length<4&&Date.now()>sn&&curTab()==='home';
   if(!need){ if(g) g.remove(); return; }
-  var first0=!(PHOTOS_L&&PHOTOS_L.length), must=!!(D&&D.photoMust);
+  var first0=!(PHOTOS_L&&PHOTOS_L.length), must=true; /* 22.11.26 אביאל: תמיד חובה להצטלם — בלי "לא עכשיו", אחרת אף אחד לא מצטלם. נשאר רק "עוד שעתיים" שחוזר */
   var h='<div class="phg"><b>'+(first0?'תמונות התחלה':'תמונות החודש')+'</b><p>'+(first0?'':'עבר חודש. ')+'4 תמונות: חזית, שני הצדדים וגב. באותו מקום ובאותה תאורה, ככה רואים את השינוי האמיתי. לוחצים על כל משבצת ומצלמים. רק אביאל רואה אותן.</p>'+phSlotsHtml()+'<button type="button" class="linkbtn" id="phLater">אני באמצע אימון, עוד שעתיים</button>'+(must?'':'<button type="button" class="linkbtn" id="phSkip">לא עכשיו</button>')+'</div>';
   if(!g){ g=document.createElement('div'); g.id='phGate'; g.className='phgate'; document.body.appendChild(g); } g.innerHTML=h;
   g.querySelector('#phLater').onclick=function(){ lsSet('aviel_ph_gate',String(Date.now()+2*36e5)); phGate(); }; var sk=g.querySelector('#phSkip'); if(sk) sk.onclick=function(){ lsSet('aviel_ph_gate',String(Date.now()+12*36e5)); phGate(); }; };

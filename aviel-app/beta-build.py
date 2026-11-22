@@ -1061,7 +1061,7 @@ man.update({'name': 'AVIEL בטא', 'short_name': 'AVIEL β'})
 for f in ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'hero.jpg', 'wk-push.jpg', 'wk-back.jpg', 'wk-legs.jpg', 'wk-glutes.jpg', 'wk-full.jpg']:
     if (ROOT / f).exists(): shutil.copy(ROOT / f, OUT / f)
 (OUT / 'sw.js').write_text("""// בטא: מטמון + התראות פוש (הודעה נמשכת מהשרת)
-const C = 'aviel-beta-v327-""" + __import__('hashlib').md5(h.encode('utf8')).hexdigest()[:8] + """', API = '""" + API + """';
+const C = 'aviel-beta-v328-""" + __import__('hashlib').md5(h.encode('utf8')).hexdigest()[:8] + """', API = '""" + API + """';
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(['./', 'index.html', 'manifest.webmanifest', 'icon-192.png']))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C && k.indexOf(C.replace(/\d.*$/, '')) === 0).map(k => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener('fetch', e => {
