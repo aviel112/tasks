@@ -918,9 +918,10 @@ async function draftQueueTick() {
       const it = q.items.shift(); if (!drafts.get(it.id)) continue // בוטלה או נענתה בינתיים
       if (it.notBefore && Date.now() < it.notBefore) { later.push(it); continue } // נדחתה למחר
       { const d = drafts.get(it.id), pn = String(d.phone || '').replace(/\D/g, '').slice(-9) // 22.11.26: כבר שלחת לו/ה משהו ב-12 השעות האחרונות → לא מציעים הודעה שנייה ברצף
-        const sentRecently = drafts.recentSent(200).some((x) => Date.now() - Date.parse(x.at) < 12 * 3600e3 && (x.chat_jid === d.chat_jid || (pn && String(x.jid || '').replace(/\D/g, '').slice(-9) === pn)))
+        const ilDay = (t) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }), today = ilDay(Date.now()) // 22.11.26: "ברצף" = באותו יום, לא 12 שעות (עידן נדחה בגלל הודעה מאמש)
+        const sentRecently = drafts.recentSent(200).some((x) => ilDay(Date.parse(x.at)) === today && (x.chat_jid === d.chat_jid || (pn && String(x.jid || '').replace(/\D/g, '').slice(-9) === pn)))
         const last = sentRecently ? null : await biz.lastMessage(d.chat_jid).catch(() => null)
-        const wroteRecently = last && last.is_from_me && Date.now() - Date.parse(String(last.timestamp).replace(' ', 'T')) < 12 * 3600e3 && !d.clientText
+        const wroteRecently = last && last.is_from_me && ilDay(Date.parse(String(last.timestamp).replace(' ', 'T'))) === today && !d.clientText
         if (!d.clientText && (sentRecently || wroteRecently)) { /* תשובה ללקוח שכתב — לא נוגעים */
           if (!it.postponed) { const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(10, 0, 0, 0); drafts.touch && drafts.touch(it.id); later.push({ ...it, postponed: true, notBefore: t.getTime() }); console.log('[dq] postponed to tomorrow:', d.name, it.id); continue } // פעם אחת למחר בבוקר, לא נמחק
           drafts.remove(it.id); q.total = Math.max(0, q.total - 1); console.log('[dq] dropped (already messaged):', d.name, it.id); continue } }
