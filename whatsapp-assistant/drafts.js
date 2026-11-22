@@ -109,7 +109,17 @@ function findSent(nameQuery) {
 // אישור פשוט: "כן" / "לא" / "הקלט", לבד (כתשובה להודעה או כשיש טיוטה אחת) או עם מספר/שם: "כן שון", "לא 7".
 // תמיכה גם בישן: "שלח 7", "שלח 7: טקסט", "בטל 7".
 function parseCommand(text) {
-  const s = String(text).trim()
+  const s = String(text).trim().replace(/\s+/g, ' ')
+  // 22.11.26 (אביאל: "אני כותב לו הכל והוא לא מבין"): כל סדר של שם / מספר טיוטה / נוסח 1-3
+  let x = s.match(/^#?(\d{2,})$/) // רק מספר טיוטה: "584"
+  const live = (id) => !!load().items[Number(id)] // מספר נחשב לטיוטה רק אם יש כזו ממתינה (אחרת "1400" של פקודת מאמן)
+  if (x && live(x[1])) return { type: 'pick', ref: x[1] }
+  x = s.match(/^(?:כן\s+)?(?:#?(\d{2,})\s+([123])|([123])\s+#?(\d{2,}))$/) // "584 1" / "1 584"
+  if (x && live(x[1] || x[4])) return { type: 'send', ref: x[1] || x[4], option: Number(x[2] || x[3]), force: false, override: null }
+  x = s.match(/^(?:כן\s+)?(?:#?(\d{2,})\s+([\u0590-\u05FF][\u0590-\u05FF ]*)|([\u0590-\u05FF][\u0590-\u05FF ]*)\s+#?(\d{2,}))$/) // "584 אודליה" / "אודליה 584"
+  if (x && live(x[1] || x[4]) && (x[2] || x[3]).trim().split(' ').length <= 2 && !/^(כן|לא|שלח|בטל)$/.test((x[2] || x[3]).trim())) return { type: 'send', ref: x[1] || x[4], option: 1, force: false, override: null, nameCheck: (x[2] || x[3]).trim() }
+  x = s.match(/^(?:כן\s+)?([\u0590-\u05FF][\u0590-\u05FF ]*)\s+([123])$/) // "אודליה 1" / "כן שון 2"
+  if (x && x[1].trim().split(' ').length <= 2 && !/^(כן|לא|שלח|בטל|אשר)$/.test(x[1].trim())) return { type: 'send', ref: x[1].trim(), option: Number(x[2]), force: false, override: null }
   // בחירת הצעה: "1" / "2" / "1 שון" / "2 שון" / "כן 2 שון"
   let o = s.match(/^(?:כן\s+)?([123])(?:\s+([\u0590-\u05FF][\u0590-\u05FF ]*|#?\d{2,}))?$/)
   if (o) return { type: 'send', ref: (o[2] || '').replace('#', '').trim() || null, option: Number(o[1]), force: false, override: null }
@@ -137,12 +147,13 @@ function parseCommands(text) {
 }
 
 // מספר או שם → מזהה טיוטה ממתינה
-function resolveRef(ref) {
+function resolveRef(ref, prefer = []) {
   if (!ref) return null
   if (/^\d+$/.test(ref)) return Number(ref)
   const d = load()
   const hits = Object.entries(d.items).filter(([, it]) => String(it.name || '').includes(ref) || (it.alias && it.alias.includes(ref)))
-  return hits.length === 1 ? Number(hits[0][0]) : hits.length ? { ambiguous: hits.map(([id, it]) => `${it.name} (${id})`) } : null
+  if (hits.length > 1) { const p = prefer.map(Number).find((i) => hits.some(([id]) => Number(id) === i)); if (p) return p } // 22.11.26: כמה טיוטות לאותו אדם — זו שמוצגת עכשיו
+  return hits.length === 1 ? Number(hits[0][0]) : hits.length ? { ambiguous: hits.map(([id, it]) => `${it.name} (${id})`), ids: hits.map(([id]) => Number(id)) } : null
 }
 
 // הפרומפט לטיוטה — משותף ל-index.js ולבדיקות

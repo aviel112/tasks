@@ -630,6 +630,7 @@ async function promisesBlock() {
 // הטיוטה שהעוזרת הציעה אחרונה לאביאל — "כן"/"1"/"2" בלי שם חלים רק עליה
 let lastOfferedDraftId = null
 let prevOfferedDraftId = null, lastOfferedAt = 0 // ההצעה הקודמת ומתי הגיעה החדשה — "כן" שנכתב לפני שההתראה החדשה הגיעה שייך לקודמת
+let AMBIG = null // 22.11.26: "יש כמה" שמחכה למספר
 function offerDraft(id) { if (id !== lastOfferedDraftId) prevOfferedDraftId = lastOfferedDraftId; lastOfferedDraftId = id; lastOfferedAt = Date.now() }
 const PREFS_PATH = path.join(ROOT, 'brain', 'prefs.md')
 const prefsText = () => { try { return fs.readFileSync(PREFS_PATH, 'utf8').trim() } catch { return '' } }
@@ -1680,7 +1681,14 @@ function onIncoming(msg) {
       if (bloodGate.isMissingCmd(text)) { queue = queue.then(() => bloodGate.missing()).catch((e) => console.error('[blood-gate]', e)); return } }
     { const mq0 = msg.hasQuotedMsg && config.owner && cid === config.owner && mealRelay.qidByStanza(msg._data && msg._data.quotedStanzaID) // 18.11.26: "כן"/תיקון על הודעת ארוחה — לפני הטיוטות
       if (mq0) { queue = queue.then(() => mealRelay.fix(mq0, text)).catch((e) => { console.error('[meal-fix]', e); client.sendMessage(config.owner, toWhatsApp('התיקון לארוחה לא עבר: ' + String(e.message || e).slice(0, 120))).catch(() => {}) }); return } }
-    const draftCmd = drafts.parseCommand(text)
+    let draftCmd = drafts.parseCommand(text)
+    // 22.11.26: תשובה למספר אחרי "יש כמה" → מבצעים את הפקודה המקורית על הטיוטה שנבחרה
+    if (draftCmd && draftCmd.type === 'pick' && AMBIG && Date.now() - AMBIG.at < 15 * 60e3 && AMBIG.ids.includes(Number(draftCmd.ref))) { draftCmd = { ...AMBIG.cmd, ref: draftCmd.ref }; AMBIG = null }
+    if (draftCmd && draftCmd.type === 'pick') { // רק מספר טיוטה: מציגים אותה ושואלים איזה נוסח
+      const it = drafts.get(Number(draftCmd.ref))
+      if (it) { offerDraft(Number(draftCmd.ref)); client.sendMessage(config.owner, toWhatsApp(`#${draftCmd.ref} זו ${it.name}. איזה נוסח? ${it.alt ? '*1*, *2*' + (it.alt2 ? ' או *3*' : '') : '*כן* שולח'} · *לא* מבטל`)).catch(() => {}); return }
+      draftCmd = null
+    }
     // "כן"/"1"/"2" בלי שם ובלי ציטוט — רק אם הדבר האחרון שהעוזרת הציעה היא טיוטה שעדיין ממתינה; אחרת זו שיחה רגילה
     const bare = draftCmd && !draftCmd.ref && !msg.hasQuotedMsg
     const bareOk = bare && lastOfferedDraftId && drafts.get(lastOfferedDraftId)
@@ -1900,8 +1908,9 @@ function bump(key) {
 
 async function handleDraftCommand(msg, cmd) {
   const say = (t) => client.sendMessage(config.owner, toWhatsApp(t)).catch(console.error)
-  let id = drafts.resolveRef(cmd.ref)
-  if (id && id.ambiguous) return say(`יש כמה: ${id.ambiguous.join(', ')}. תכתוב את המספר.`)
+  let id = drafts.resolveRef(cmd.ref, [dqLoad().cur, lastOfferedDraftId, prevOfferedDraftId])
+  if (id && id.ambiguous) { AMBIG = { cmd, ids: id.ids, at: Date.now() }; return say(`יש כמה ל${cmd.ref}: ${id.ambiguous.join(', ')}. תכתוב רק את המספר והנוסח ${cmd.option || 1} יישלח.`) }
+  if (cmd.nameCheck && drafts.get(id) && !String(drafts.get(id).name || '').includes(cmd.nameCheck) && !String(drafts.get(id).alias || '').includes(cmd.nameCheck)) return say(`#${id} שייכת ל${drafts.get(id).name}, לא ל${cmd.nameCheck}. לא שלחתי.`)
   if (!id && msg.hasQuotedMsg) {
     const quoted = await msg.getQuotedMessage().catch(() => null)
     if (quoted) id = drafts.findByAlert(quoted.id?._serialized)
