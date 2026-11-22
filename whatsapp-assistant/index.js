@@ -1421,6 +1421,8 @@ cron.schedule('30 11 * * *', foodReviewDaily, { timezone: 'Asia/Jerusalem' })
 // ── פקודות מאמן בטקסט חופשי (coach-cmd.js): "ליהב יעד 1400 קלוריות" → בצע/בטל ──
 const coachCmd = require('./coach-cmd')
 coachCmd.init({ client, config, toWhatsApp })
+const coachOps = require('./coach-ops') // 22.11.26
+coachOps.init({ say: (t) => client.sendMessage(config.owner, toWhatsApp(t)).catch(() => {}), drafts, biz, askBrainOnce, queuePush: (id, t, front) => draftQueuePush(id, t, config.owner, !!front) })
 const groupAgents = require('./accountant') // שרונה (כספים) ואבי המאמן (מתאמנים) — כל אחד בקבוצה משלו (2.11.26)
 groupAgents.init({ client, config, toWhatsApp })
 setInterval(() => coachCmd.names(), 36e5)
@@ -1773,6 +1775,8 @@ function onIncoming(msg) {
     if (/^שלח\s+\S/.test(String(text || '').trim()) && TECH_PENDING[String(text).trim().split(/\s+/)[1].replace(/[:：].*$/, '')]) { queue = queue.then(() => techReply(text)).catch((e) => console.error('[tech-reply]', e)); return } // תשובה לסרטון טכניקה
     if (morningAgent.isReply(text) && !coachCmd.hasPending()) { queue = queue.then(() => morningAgent.handleReply(text)).catch((e) => console.error('[morning-agent]', e)); return } // תשובה לסוכן הבוקר
     if (groupAgents.has('avi') && coachCmd.isCandidate(text, msg.hasQuotedMsg) && !coachCmd.hasPending()) { queue = queue.then(() => client.sendMessage(config.owner, toWhatsApp('פקודות על מתאמנים עברו לאבי המאמן, בקבוצה שלו. פה אני המנהלת האישית שלך.'))).catch(() => {}); return }
+    // 22.11.26 (אביאל: "שאני כמעט לא אצטרך להיכנס לאפליקציה"): כרטיס / תשלום / חידוש / מתאמן חדש / שינוי תפריט-תוכנית מהוואטסאפ
+    if (!msg.hasQuotedMsg && coachOps.isMine(text) && !(/^(1|2|כן|לא)$/.test(String(text).trim()) && lastOfferedAt > coachOps.pendingAt())) { queue = queue.then(async () => { if (!(await coachOps.handle(text))) await handle(msg, text) }).catch((e) => console.error('[coach-ops]', e)); return }
     if (coachCmd.isCandidate(text, msg.hasQuotedMsg)) { queue = queue.then(async () => { if (!(await coachCmd.handle(text))) await handle(msg, text) }).catch((e) => console.error('[coach-cmd]', e)); return } // פקודת מאמן; לא פקודה → שיחה רגילה
     if (foodReview.isReply(text)) { queue = queue.then(() => foodReview.handleReply(text)).catch((e) => console.error('[food-review]', e)); return } // תשובה לבדיקת המאכלים היומית
     const closeCmd = advisor.parseCloseCommand(text)
