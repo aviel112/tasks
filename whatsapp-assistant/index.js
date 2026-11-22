@@ -731,8 +731,10 @@ async function checkWaitingClients() {
       const leadHot = !allowedQ && LEAD_HOT_RE.test(streak) && (await biz.messageCount(w.chat_jid).catch(() => 99)) < 40
       const slots = leadHot ? await freeSlots().catch(() => []) : []
       let photoNote = ''
-      if (allowedQ) {
-        const imgs = await biz.recentImages(w.chat_jid, 45).catch(() => [])
+      // 22.11.26 (עידו שלח תמונה והטיוטה ענתה "לא מופיעה בתוכן"): כל תמונה טרייה מהמתאמן נכנסת לטיוטה, לא רק בשאלת "מותר?"
+      const freshImgs = await biz.recentImages(w.chat_jid, allowedQ ? 45 : 20).catch(() => [])
+      if (freshImgs.length) {
+        const imgs = freshImgs
         for (const im of imgs.slice(0, 2)) {
           const src = await biz.downloadMedia(im.id, im.chat_jid)
           if (!src) continue
@@ -740,12 +742,13 @@ async function checkWaitingClients() {
           try { fs.mkdirSync(path.join(ROOT, 'photos'), { recursive: true }); fs.copyFileSync(src, dst); photoNote += `\nתמונה שהלקוח שלח: ${dst} — פתחי אותה עם Read והתייחסי למה שרואים (מנה, כמות משוערת).`; setTimeout(() => fs.rmSync(dst, { force: true }), 30 * 60 * 1000) } catch {}
         }
       }
+      if (freshImgs.length && !photoNote) { photoNote = '\nהמתאמן שלח תמונה שלא הצלחתי לפתוח. לא להעמיד פנים שראית אותה: תשובה כללית או לבקש לכתוב במילה מה יש בה.'; console.log('[biz-photo] download failed', biz.nameOf(w)) } // 22.11.26
       const sent = await alertWithDraft({
         title: 'מחכה לך בעסקי',
         who: w,
-        batchable: !leadHot && !allowedQ && !fileQ,
-        allowTools: allowedQ || fileQ,
-        situation: `מתאמן/ליד כתב לווטסאפ העסקי של אביאל ב-${ISR_TIME(w.timestamp)}.` + (allowedQ ? ' זו שאלה של "מותר לי?" / "אפשר לאכול?".' : ''),
+        batchable: !leadHot && !allowedQ && !fileQ && !photoNote,
+        allowTools: allowedQ || fileQ || !!photoNote, // תמונה = המוח צריך Read כדי לראות אותה
+        situation: `מתאמן/ליד כתב לווטסאפ העסקי של אביאל ב-${ISR_TIME(w.timestamp)}.` + (allowedQ ? ' זו שאלה של "מותר לי?" / "אפשר לאכול?".' : '') + (photoNote && !allowedQ ? photoNote.replace('(מנה, כמות משוערת)', '(מה רואים בתמונה: צלחת, מסך, משקל, תוצאה — ולענות עליה עניינית, לא "התמונה לא מופיעה")') : ''),
         headline: leadHot ? `מתעניין: "${String(w.content || '').slice(0, 80)}" (לבדוק)` : '',
         extraRules: fileQ
           ? 'המתאמן מבקש קובץ (תפריט/תוכנית). למצוא אותו ב-Google Drive: חיפוש בתיקיית המתאמנים (folder id 1BgKSHeNMxfePdv0A7D-ZOLZqn3SZqV9g) או לפי השם הפרטי + "תפריט"/"תוכנית", לבחור את העדכני ביותר, ולבדוק עם get_file_permissions שיש גישה למי שיש לו קישור. ' +
