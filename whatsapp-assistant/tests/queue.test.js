@@ -9,9 +9,11 @@ async function scenario(D, SENT, fn) {
   const biz = { lastMessage: async () => null }, config = { owner: 'OWN' }, clientReady = true, toWhatsApp = (t) => t, offerDraft = () => {}
   const client = { sendMessage: async (to, t) => { out.push(t.split('\n')[0]); return { id: { _serialized: 'm' } } } }
   eval(code)
+  globalThis.DQ_FILE = () => DQ_PATH
   const T = () => new Promise((r) => setTimeout(r, 650))
   await fn({ draftQueuePush, draftQueueTick, draftQueueSkip, T, out, D, SENT })
 }
+const DQ_FILE = () => globalThis.DQ_FILE()
 const P = (n, ph, extra) => ({ name: n, phone: ph, chat_jid: ph + '@lid', ...extra })
 ;(async () => {
   await scenario({ 1: P('א', '1'), 2: P('ב', '2'), 3: P('ג', '3', { clientText: 'היי' }) }, [], async ({ draftQueuePush, draftQueueTick, T, out, D }) => {
@@ -28,6 +30,11 @@ const P = (n, ph, extra) => ({ name: n, phone: ph, chat_jid: ph + '@lid', ...ext
     draftQueuePush(1, 'O1'); draftQueuePush(2, 'O2'); draftQueuePush(3, 'L-reply'); await T()
     SENT.push({ at: today, chat_jid: '1@lid', jid: '1' }); delete D[1]; await draftQueueTick()
     eq('שנייה לאותו אדם באותו יום → למחר; תשובה ללקוח לא נדחית', out, ['O1', 'L-reply']); eq('נשמרה (לא נמחקה)', !!D[2], true)
+  })
+  await scenario({ 1: P('עידן', '1'), 2: P('עידו', '2') }, [], async ({ draftQueuePush, draftQueueTick, T, out }) => {
+    draftQueuePush(1, 'IDAN'); await T(); draftQueuePush(2, 'IDO'); await T(); eq('לא עונים — עדיין ממתין', out, ['IDAN'])
+    const f = DQ_FILE(); const q = JSON.parse(fs.readFileSync(f)); q.curAt = Date.now() - 16 * 60e3; fs.writeFileSync(f, JSON.stringify(q)); await draftQueueTick()
+    eq('אחרי 15 דק׳ בלי תגובה — ממשיכים לבא', out, ['IDAN', 'IDO'])
   })
   const y = new Date(Date.now() - 86400e3).toISOString()
   await scenario({ 1: P('עידן', '1') }, [{ at: y, chat_jid: '1@lid', jid: '1' }], async ({ draftQueuePush, T, out }) => {

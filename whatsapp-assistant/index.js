@@ -915,7 +915,10 @@ function draftQueueSkip() { const q = dqLoad(); if (!q.items.length && !q.cur) r
 let dqBusy = false
 async function draftQueueTick() {
   if (dqBusy || !config.owner || !clientReady) return
-  const q = dqLoad(); if (q.cur && drafts.get(q.cur) && Date.now() - (q.curAt || 0) < 3 * 3600e3) return // אביאל עוד לא טיפל בנוכחית (אחרי 3 שעות ממשיכים, והיא נשארת פתוחה)
+  const q = dqLoad(); if (q.cur && drafts.get(q.cur) && Date.now() - (q.curAt || 0) < 15 * 60e3) return // אביאל עוד לא טיפל בנוכחית
+  // 22.11.26 (אביאל: "תמשיך לשלוח לי" — נתקע 40 דק׳ על עידן): 15 דקות בלי תגובה → הנוכחית לסוף התור (נשארת פתוחה), וממשיכים
+  if (q.cur && drafts.get(q.cur) && q.items.some((x) => x.id !== q.cur && drafts.get(x.id) && !(x.notBefore && Date.now() < x.notBefore))) { q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true }); q.cur = null; dqSave(q) }
+  else if (q.cur && drafts.get(q.cur)) return
   if (!q.cur && !q.items.some((x) => !(x.notBefore && Date.now() < x.notBefore))) return
   dqBusy = true
   try {
