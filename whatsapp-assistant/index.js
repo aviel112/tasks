@@ -909,7 +909,9 @@ function draftQueuePush(id, text, to, front) { const q = dqLoad(); if (!q.items.
   const it = { id, text, to: to || config.owner }; if (front) { const k = q.items.findIndex((x) => !x.front); it.front = true; q.items.splice(k < 0 ? q.items.length : k, 0, it) } else q.items.push(it)
   q.total++; dqSave(q); setTimeout(draftQueueTick, 500) }
 // "הבא" / "דלג": מעבירים את הנוכחית לסוף התור (היא נשארת פתוחה לאישור לפי שם או מספר)
-function draftQueueSkip() { const q = dqLoad(); if (!q.items.length) return false; if (q.cur && drafts.get(q.cur) && q.curText) q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true }); q.cur = null; dqSave(q); draftQueueTick(); return true }
+function draftQueueSkip() { const q = dqLoad(); if (!q.items.length && !q.cur) return false
+  if (!q.items.some((x) => x.id !== q.cur && drafts.get(x.id) && !(x.notBefore && Date.now() < x.notBefore))) { client.sendMessage(config.owner, toWhatsApp('זה האחרון בתור להיום. אפשר לענות עליו, או *לא* כדי לבטל.')).catch(() => {}); return true } // 22.11.26: "הבא" על האחרון הציג אותו שוב
+   if (q.cur && drafts.get(q.cur) && q.curText) q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true }); q.cur = null; dqSave(q); draftQueueTick(); return true }
 let dqBusy = false
 async function draftQueueTick() {
   if (dqBusy || !config.owner || !clientReady) return
