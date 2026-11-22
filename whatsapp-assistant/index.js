@@ -738,7 +738,7 @@ async function checkWaitingClients() {
       const slots = leadHot ? await freeSlots().catch(() => []) : []
       const distress = DISTRESS_RE.test(streak), pain = PAIN_RE.test(streak)
       if (CRISIS_RE.test(streak)) { await client.sendMessage(config.owner, toWhatsApp(`*דחוף · ${biz.nameOf(w)}*\nכתב/ה משהו שנשמע כמו מצוקה רצינית. כדאי להתקשר עכשיו, לא לכתוב.\nאם יש סכנה מיידית: מד"א 101 · ער"ן 1201`)).catch(() => {}); console.log('[crisis] alert', biz.nameOf(w)); continue }
-      let progNote = ''; if (pain) { try { const nm = (await coachOps.findName(biz.nameOf(w))) || {}; const pi = nm.name ? await coachOps.programInfo(nm.name) : null; if (pi && pi.date && !pi.hasNote) progNote = `\nהתוכנית באפליקציה מ-${pi.date}, בלי הערה על הכאב. אם צריך: "תוסיף ל${nm.name.split(' ')[0]} בתוכנית הערה: ..."` } catch (e) {} }
+      let progNote = ''; if (pain) { try { const nm = (await coachOps.findName(biz.nameOf(w))) || {}; const pi = nm.name ? await coachOps.programInfo(nm.name) : null; if (pi && !pi.hasNote) progNote = `\nהתוכנית באפליקציה${pi.date ? ' מ-' + pi.date : ''} בלי הערה על הכאב. אם צריך: "תוסיף ל${nm.name.split(' ')[0]} בתוכנית הערה: ..."` } catch (e) {} }
       let photoNote = ''
       // 22.11.26 (עידו שלח תמונה והטיוטה ענתה "לא מופיעה בתוכן"): כל תמונה טרייה מהמתאמן נכנסת לטיוטה, לא רק בשאלת "מותר?"
       const freshImgs = await biz.recentImages(w.chat_jid, allowedQ ? 45 : 20).catch(() => [])
