@@ -95,6 +95,7 @@ nav.tabs .in{grid-template-columns:none!important;grid-auto-flow:column;grid-aut
 .vid{display:inline-block;font-size:13px;font-weight:700;color:var(--gold);text-decoration:none;margin:2px 0}
 .vid.ghost{color:var(--mute)}
 .opt li{cursor:pointer}
+.fquick{display:flex;flex-direction:column;gap:8px;margin-top:8px}.fquick input{width:100%;min-width:0;box-sizing:border-box;font-size:16px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text)}.fqg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.fqg label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mute)}
 .opt li.picked{border-color:var(--good);background:rgba(92,196,137,.14)}
 .opt li.picked::before{content:"✓ ";color:var(--good);font-weight:800}
 .swaphint{font-size:12px;color:var(--mute);margin-top:6px}
@@ -165,6 +166,13 @@ FOOD_VIEW = """
         <div id="fRecent"></div>
         <div class="flist" id="fList"></div>
         <div class="mealshot"><label class="ghost sm" for="msIn">צילום ארוחה והערכת קלוריות</label><input type="file" id="msIn" accept="image/*" capture="environment" hidden><span class="sub">מצלמים את הצלחת, מקבלים הערכה של מה שיש בה, ורושמים ביומן בלחיצה. התמונה נשמרת גם אצל אביאל.</span></div>
+        <button type="button" class="ghost sm" id="fQuick">הוספה מהירה: ערכים ל-100 גרם</button>
+        <form id="fQuickF" class="fquick" hidden>
+          <input id="fqN" placeholder="שם המאכל, למשל: פשטידה ביתית" aria-label="שם המאכל" style="font-size:16px">
+          <div class="fqg"><label>קלוריות<input id="fqK" inputmode="decimal"></label><label>חלבון<input id="fqP" inputmode="decimal"></label><label>פחמימה<input id="fqC" inputmode="decimal"></label><label>שומן<input id="fqF" inputmode="decimal"></label></div>
+          <div class="sub">כל הערכים ל-100 גרם. בשלב הבא בוחרים כמה גרם אכלת.</div>
+          <button type="submit" class="installbtn">המשך לכמות</button>
+        </form>
         <div class="chips" id="fUnits"></div>
         <div class="chips" id="fMeals" role="group" aria-label="לאיזו ארוחה"></div>
         <form class="fadd" id="fAdd" hidden><input id="fG" inputmode="numeric" aria-label="גרם"><button type="submit" id="fBtn">הוספה</button></form>
@@ -386,7 +394,7 @@ function scanStop(){ try{ if(SCAN.reader&&SCAN.reader.stopContinuousDecode) SCAN
   try{ (SCAN.stream&&SCAN.stream.getTracks()||[]).forEach(function(t){ t.enabled=false; }); }catch(e){} clearTimeout(SCAN.off); SCAN.off=setTimeout(camKill,180000); $('#scan').hidden=true; }
 document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&$('#scan').hidden) camKill(); });
 function camFail(){ scanStop(); camKill(); toast('אין גישה למצלמה. מאשרים מצלמה בהגדרות הטלפון ומנסים שוב.',1); }
-function scanStart(){ $('#scan').hidden=false; var v=$('#scanV');
+function scanStart(){ if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('הדפדפן הזה חוסם מצלמה. פותחים את האפליקציה בספארי או בכרום ומנסים שוב, או מחפשים את המוצר בשם.',1); try{ $('#fQ').focus(); }catch(e){} return; } $('#scan').hidden=false; var v=$('#scanV');
   if(!window.BarcodeDetector&&!window.ZXing){ scanStop(); toast('הסורק עוד נטען, מנסים שוב בעוד רגע',1); return; }
   camGet().then(function(st){ if($('#scan').hidden) throw 'closed'; v.srcObject=st; v.setAttribute('playsinline',''); return v.play().then(function(){ return st; }); }).then(function(st){
     if(window.BarcodeDetector){ var det=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
@@ -406,6 +414,13 @@ function onCode(code){ code=String(code||'').replace(/\D/g,''); if(!code) return
 }
 function showLabel(code,q){ var L=$('#fLabel'); L.hidden=false; L.dataset.code=code||''; $('#fList').innerHTML=''; $('#fAdd').hidden=true; $('#flName').value=q||''; $('#flName').focus(); }
 $('#fScan').onclick=scanStart; $('#scanX').onclick=scanStop;
+/* 11.11.26 (אביאל): הוספה מהירה כמו ב-MyFitnessPal: מאכל ביתי/מתכון, ערכים ל-100 גרם ואז כמה אכלת. לא נשמר במאגר המשותף */
+$('#fQuick').onclick=function(){ var f=$('#fQuickF'); f.hidden=!f.hidden; if(!f.hidden) $('#fqN').focus(); };
+$('#fQuickF').onsubmit=function(ev){ ev.preventDefault(); var n=$('#fqN').value.trim(), nv=function(id){ return Math.max(0,parseFloat(String($(id).value).replace(',','.'))||0); }, k=nv('#fqK'), pr=nv('#fqP'), c=nv('#fqC'), fa=nv('#fqF');
+  if(!n){ toast('כותבים שם למאכל',1); return; } if(!k&&!(pr||c||fa)){ toast('ממלאים קלוריות או ערכי מאקרו',1); return; }
+  if(!k) k=Math.round(pr*4+c*4+fa*9);
+  if(k>900||pr>100||c>100||fa>100){ toast('הערכים צריכים להיות ל-100 גרם',1); return; }
+  this.hidden=true; this.reset(); pick({name:n.slice(0,80),k100:k,p:pr,c:c,fat:fa,g:100,ok:false}); };
 $('#flIn').addEventListener('change',function(){ var file=this.files&&this.files[0]; if(!file) return; var nm=$('#flName').value.trim(); if(!nm){ toast('קודם כותבים את שם המוצר',1); this.value=''; return; } toast('קורא את התווית…');
   shrink(file,1280,.82).then(function(img){ return fetch(API,{method:'POST',body:JSON.stringify({api:'foodlabel',t:T,p:{code:$('#fLabel').dataset.code||'',name:nm,photo:img}})}).then(function(r){ return r.json(); }).then(function(j){ if(!j.ok) throw new Error(j.error); $('#fLabel').hidden=true; $('#fQ').value='';
     var r=j.r||j; if(!(r&&r.approved)){ toast('לא הצלחתי לקרוא את הערכים מהתמונה. אביאל יבדוק ויוסיף, ובינתיים אפשר לרשום ביומן ידנית',1); return; }
@@ -426,7 +441,7 @@ function mealShot(file){ var ov=document.createElement('div'); ov.className='mso
   ov.innerHTML='<div class="msbox mshot"><div class="mspin" aria-hidden="true"></div><h2>מנתח את הצלחת…</h2><p class="sub">כמה שניות. התמונה נשמרת גם אצל אביאל.</p></div>'; document.body.appendChild(ov);
   var close=function(){ ov.remove(); }, ml=fMeal();
   shrink(file,1024,.78).then(function(img){ return fetch(API,{method:'POST',body:JSON.stringify({api:'mealphoto',t:T,p:{photo:img,meal:ml}})}).then(function(r){ return r.json().catch(function(){ throw new Error('השרת לא זמין כרגע. נסו שוב בעוד רגע'); }); }); })
-  .then(function(j){ if(!j.ok) throw new Error(j.error||'לא נשלח'); var an=(j.r&&j.r.an)||{}, it=an.items||[], box=ov.querySelector('.msbox');
+  .then(function(j){ if(!j.ok) throw new Error(j.error||'לא נשלח'); var an=(j.r&&j.r.an)||{}, it=an.items||[], box=ov.querySelector('.msbox'); var Q=an.q||[], ans=[], free='', pid=(j.r&&j.r.id)||''; /* 18.11.26 (אביאל): שאלות הבהרה לפני הרישום, ואחרי הרישום התמונה והפענוח נשלחים לאביאל בוואטסאפ */
     if(!it.length){ box.innerHTML='<h2>התמונה אצל אביאל</h2><p class="sub">'+esc(an.note||(an.err?'הניתוח האוטומטי לא זמין כרגע. אביאל יראה את התמונה.':'לא זיהיתי מאכלים בתמונה.'))+'</p><button type="button" id="msOk">סגירה</button>'; box.querySelector('#msOk').onclick=close; return; }
     var draw=function(){ var on=it.filter(function(x){ return !x.off; }), t={k:0,p:0,c:0,f:0}; on.forEach(function(x){ t.k+=x.k; t.p+=x.p; t.c+=x.c; t.f+=x.f; });
       box.innerHTML='<h2>מה יש בצלחת</h2><p class="sub">הערכה לפי התמונה. מורידים מה שלא אכלתם, ואז רושמים.</p><div class="msl">'+it.map(function(x,i){ return '<button type="button" class="msi'+(x.off?' off':'')+'" data-i="'+i+'" aria-pressed="'+!x.off+'"><span class="tdc">'+(x.off?'':IC_OK)+'</span><span class="msn"><b>'+esc(x.n)+'</b><small>'+(x.g?x.g+' ג׳ · ':'')+x.p+' ח׳ · '+x.c+' פ׳ · '+x.f+' ש׳</small></span><span class="num">'+x.k+'</span></button>'; }).join('')+'</div>'+
@@ -434,10 +449,19 @@ function mealShot(file){ var ov=document.createElement('div'); ov.className='mso
         '<button type="button" id="msLog"'+(on.length?'':' disabled')+'>לרשום ביומן ('+esc(ml)+')</button><button type="button" class="ghost" id="msX">בלי לרשום</button>';
       box.querySelectorAll('.msi').forEach(function(b){ b.onclick=function(){ var x=it[+b.dataset.i]; x.off=!x.off; draw(); }; });
       box.querySelector('#msX').onclick=close;
-      box.querySelector('#msLog').onclick=function(){ var bt=this; bt.disabled=true; bt.textContent='רושם…'; var q=Promise.resolve();
-        on.forEach(function(x){ q=q.then(function(){ return api('food',{f:x.n+' (צילום)',g:x.g||0,k:x.k,p:x.p,c:x.c,fat:x.f,m:ml}).then(function(r){ FDAY=r; }); }); });
-        q.then(function(){ close(); toast('נרשם ביומן: '+t.k+' קק״ל'); try{ renderFood(); }catch(e){} try{ renderTodayCard(); }catch(e){} }).catch(function(e){ bt.disabled=false; bt.textContent='לנסות שוב'; toast(e.message||'לא נרשם',1); }); }; };
-    draw(); })
+      box.querySelector('#msLog').onclick=function(){ var bt=this; if(bt.dataset.busy) return; bt.dataset.busy=1; bt.disabled=true; bt.textContent='רושם…'; var q=Promise.resolve();
+        on.forEach(function(x){ q=q.then(function(){ if(x.logged) return; return api('food',{f:x.n+' (צילום)',g:x.g||0,k:x.k,p:x.p,c:x.c,fat:x.f,m:ml}).then(function(r){ FDAY=r; x.logged=1; }); }); }); /* 18.11.26: 'לנסות שוב' לא רושם שוב מה שכבר נרשם */
+        q.then(function(){ api('mealdone',{id:pid,meal:ml,items:on.map(function(x){ return {n:x.n,g:x.g,k:x.k,p:x.p,c:x.c,f:x.f}; }),answers:ans,free:free}).catch(function(){}); close(); toast('נרשם ביומן: '+t.k+' קק״ל. אביאל רואה את הארוחה'); try{ renderFood(); }catch(e){} try{ renderTodayCard(); }catch(e){} }).catch(function(e){ delete bt.dataset.busy; bt.disabled=false; bt.textContent='לנסות שוב'; toast(e.message||'לא נרשם',1); }); }; };
+    var ask=function(){ var pick={};
+      box.innerHTML='<h2>רגע לפני שרושמים</h2><p class="sub">כמה שאלות קצרות, כדי שהמספרים יהיו מדויקים.</p><div class="msq">'+Q.map(function(q,i){ return '<div class="msqi"><b>'+esc(q.q)+'</b><div class="msqo">'+q.o.concat(['לא בטוח/ה']).map(function(o){ return '<button type="button" data-q="'+i+'" data-o="'+esc(o)+'">'+esc(o)+'</button>'; }).join('')+'</div></div>'; }).join('')+'</div>'+
+        '<label class="msfree">משהו להוסיף? (לא חובה)<input id="msFree" placeholder="למשל: אכלתי רק חצי מהאורז"></label>'+
+        '<button type="button" id="msGo">לחשב לפי התשובות</button><button type="button" class="ghost" id="msSkip">לדלג</button>';
+      box.querySelectorAll('[data-q]').forEach(function(b){ b.onclick=function(){ var i=+b.dataset.q; pick[i]=b.dataset.o; box.querySelectorAll('[data-q="'+i+'"]').forEach(function(x){ x.classList.toggle('on',x===b); x.setAttribute('aria-pressed',x===b); }); }; });
+      box.querySelector('#msSkip').onclick=draw;
+      box.querySelector('#msGo').onclick=function(){ var bt=this; ans=Q.map(function(q,i){ return pick[i]&&pick[i]!=='לא בטוח/ה'?{q:q.q,a:pick[i]}:null; }).filter(Boolean); free=String(box.querySelector('#msFree').value||'').trim().slice(0,200);
+        if(!ans.length&&!free){ draw(); return; } bt.disabled=true; bt.textContent='מחשב מחדש…';
+        api('mealrefine',{id:pid,items:it.map(function(x){ return {n:x.n,g:x.g,k:x.k,p:x.p,c:x.c,f:x.f}; }),answers:ans,free:free}).then(function(r){ var a2=(r&&r.an)||{}; if(a2.items&&a2.items.length){ it=a2.items; if(a2.note) an.note=a2.note; } draw(); }).catch(function(){ toast('לא הצלחתי לחשב מחדש, נשארת ההערכה מהתמונה',1); draw(); }); }; };
+    (Q.length?ask():draw()); })
   .catch(function(e){ var box=ov.querySelector('.msbox'); box.innerHTML='<h2>התמונה לא נשלחה</h2><p class="sub">'+esc(e.message||'נסו שוב בעוד רגע')+'</p><button type="button" id="msOk">סגירה</button>'; box.querySelector('#msOk').onclick=close; }); }
 $('#phIn').addEventListener('change',function(){ var file=this.files&&this.files[0]; if(!file) return; toast('מעלה את התמונה…');
   Promise.all([shrink(file,1280,.82),shrink(file,320,.7)]).then(function(x){
@@ -543,6 +567,7 @@ nav.tabs button[aria-selected="true"] svg{color:var(--gold)}
 .sheet-in li{display:grid;grid-template-columns:26px 1fr;gap:10px;font-size:15.5px;line-height:1.45;counter-increment:s}
 .sheet-in li::before{content:counter(s);width:26px;height:26px;border-radius:50%;background:var(--soft);color:var(--gold);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
 .sheet-in button{width:100%;margin-top:18px}
+.onb .onbn{font-size:13px;color:var(--mute);font-weight:600;margin-bottom:6px}.onb p{font-size:15.5px;line-height:1.5;margin:0 0 12px}.onb .sheet-in .onbskip{margin-top:10px;min-height:40px;font-size:14px;text-decoration:none;color:var(--mute)}
 .today{padding:18px 18px 8px}
 .tdh{font-family:var(--f-display);font-weight:700;font-size:22px;margin:0}
 .tdn{font-weight:800;color:var(--gold);font-size:15px}
@@ -673,7 +698,7 @@ a.vplay{text-decoration:none}.vmeet .vplay{margin:8px 0 0}.paycard .vplay{margin
 .hgoal .row b{color:var(--gold);font-size:18px}
 .hgoal .tbar{margin:2px 0}
 .mshot{text-align:start;max-height:88vh;overflow:auto}.mshot h2{text-align:center}.mshot .sub{text-align:center}.mspin{width:44px;height:44px;margin:4px auto 0;border-radius:50%;border:3px solid var(--line);border-top-color:var(--gold);animation:msp .9s linear infinite}@keyframes msp{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.mspin{animation:none}}
-.msl{display:flex;flex-direction:column;gap:6px;margin-top:4px}.msi{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);color:var(--text);text-align:start;font:inherit}.msi.off{opacity:.45}.msi .msn{flex:1;min-width:0;display:flex;flex-direction:column}.msi small{color:var(--mute);font-weight:500}.msi .num{font-weight:800}.mstot{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:10px 4px;border-top:1px solid var(--line);margin-top:4px}.mstot b{margin-inline-start:auto;font-size:20px}.mstot small{width:100%;color:var(--mute)}.msnote{background:var(--panel2);border-radius:12px;padding:10px 12px;font-size:14px;margin:0}
+.msl{display:flex;flex-direction:column;gap:6px;margin-top:4px}.msq{display:flex;flex-direction:column;gap:14px;margin:6px 0 12px}.msqi b{display:block;font-size:15px;margin-bottom:8px}.msqo{display:flex;flex-wrap:wrap;gap:8px}.msqo button{width:auto;min-height:40px;padding:8px 14px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:inherit;font:inherit;font-size:14px}.msqo button.on{background:var(--gold);border-color:var(--gold);color:#111}.msfree{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--mute);margin-bottom:12px}.msfree input{min-height:44px;padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);color:inherit;font:inherit}.msi{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);color:var(--text);text-align:start;font:inherit}.msi.off{opacity:.45}.msi .msn{flex:1;min-width:0;display:flex;flex-direction:column}.msi small{color:var(--mute);font-weight:500}.msi .num{font-weight:800}.mstot{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:10px 4px;border-top:1px solid var(--line);margin-top:4px}.mstot b{margin-inline-start:auto;font-size:20px}.mstot small{width:100%;color:var(--mute)}.msnote{background:var(--panel2);border-radius:12px;padding:10px 12px;font-size:14px;margin:0}
 .msov{position:fixed;inset:0;z-index:30;background:rgba(8,8,10,.72);display:flex;align-items:center;justify-content:center;padding:24px max(16px,env(safe-area-inset-left,0px))}
 .msbox{width:min(380px,100%);background:var(--panel);border:1px solid var(--gold-d);border-radius:24px;padding:26px 22px 18px;text-align:center;display:flex;flex-direction:column;gap:10px;animation:msin .45s cubic-bezier(.2,.8,.2,1)}
 .msbox h2{font-family:var(--f-display);font-size:28px;margin:6px 0 0;text-wrap:balance}
@@ -838,7 +863,7 @@ var HELP={
  intro:{t:'ככה זה עובד',l:['כל בוקר נשקלים פעם אחת. זה לוקח 10 שניות.','באימון רושמים משקל וחזרות בכל סט, והאפליקציה אומרת מתי לעלות במשקל.','באוכל מסמנים מה אכלת מהתפריט, או רושמים ביומן.','פעם בשבועיים, בסוף השבוע, ממלאים צ׳ק-אין קצר ואני מכוון אותך הלאה.','משהו לא ברור? לוחצים על סימן השאלה למעלה, או כותבים לי.']},
  home:{t:'המסך הראשי',l:['כאן רואים את היום והשבוע שלך במבט אחד.','נשקלים בבוקר, אחרי שירותים ולפני אוכל ושתייה.','מסמנים את ההרגלים היומיים ושומרים על הרצף.','הודעות ממני מופיעות כאן למעלה, כולל הודעות קוליות.','פעם בשבועיים ממלאים צ׳ק-אין, ואני מקבל אותו ישר.']},
  menu:{t:'התפריט',l:['בכל ארוחה בוחרים אפשרות אחת מהרשימה.','עוברים בין האפשרויות עם החצים, ומה שבחרת עולה ראשון בפעם הבאה.','לחיצה על אפשרות מסמנת אותה, ו״אכלתי״ סוגר את הארוחה.','הסדר גמיש. העיקר שהכל נאכל עד סוף היום.']},
- train:{t:'האימון',l:['בוחרים את האימון של היום למעלה.','בכל סט רושמים משקל וחזרות ולוחצים על הסימון.','"עוד כמה יכולת?": כמה חזרות עוד היית מצליח לעשות בסוף הסט (0 = לא הייתה עוד חזרה). ככה האפליקציה יודעת מתי להעלות משקל.','הגעת לחזרות המקסימליות בכל הסטים? בפעם הבאה עולים במשקל.','"חלופה" מחליפה תרגיל כשהמכשיר תפוס, ו"טכניקה" שולחת לי סרטון קצר ואני עונה בקולית.','מתחת לכל תרגיל יש סרטון שמראה איך עושים אותו.']},
+ train:{t:'האימון',l:['בוחרים את האימון של היום למעלה.','בכל סט רושמים משקל וחזרות ולוחצים על הסימון.','"עוד כמה יכולת?": כמה חזרות עוד נשארו בכוח בסוף הסט (0 = לא הייתה עוד חזרה). ככה האפליקציה יודעת מתי להעלות משקל.','הגעת לחזרות המקסימליות בכל הסטים? בפעם הבאה עולים במשקל.','"חלופה" מחליפה תרגיל כשהמכשיר תפוס, ו"טכניקה" שולחת לי סרטון קצר ואני עונה בקולית.','מתחת לכל תרגיל יש סרטון שמראה איך עושים אותו.']},
  food:{t:'יומן האוכל',l:['מחפשים מאכל או סורקים ברקוד, בוחרים כמות ולאיזו ארוחה.','הטבעת מראה כמה נשאר להיום מול היעד שלך.','"אחרונים" מוסיף בלחיצה אחת, ו"העתקת אתמול" חוסכת יום שלם של הקלדה.','מוצר שלא נמצא? מצלמים את התווית ואני מוסיף אותו למאגר.']},
  prog:{t:'ההתקדמות',l:['הגרף מחליק את התנודות היומיות ומראה את הכיוון האמיתי.','תמונות והיקפים מעדכנים פעם בחודש, באותו מקום ובאותה תאורה.','הכוח שלך מתעדכן לבד מכל אימון שרשמת.']}
 };
@@ -849,7 +874,24 @@ function openHelp(k,done){ var H=HELP[k]||HELP.home, s=document.createElement('d
   s.addEventListener('click',function(e){ if(e.target===s) close(); }); s.querySelectorAll('button').forEach(function(b){ b.onclick=close; }); document.addEventListener('keydown',onk);
   document.body.appendChild(s); s.querySelector('.sheet-in>button:last-child').focus(); }
 (function(){ var hb=document.getElementById('helpBtn'); if(hb) hb.onclick=function(){ openHelp(curTab()); }; })();
-var _renderIntro=render; render=function(){ _renderIntro.apply(this,arguments); var seen=0; try{ seen=localStorage.getItem('aviel_intro_v1'); }catch(e){} if(!seen&&!document.querySelector('.sheet')) openHelp('intro',function(){ try{ localStorage.setItem('aviel_intro_v1','1'); }catch(e){} }); };
+/* 6.11.26 (אביאל אישר): פתיחה ב-3 שלבים במקום רשימה אחת — ככה זה עובד, תזכורות (כפתור אמיתי), שקילה ראשונה.
+   מי שכבר ראה את הפתיחה ואין לו תזכורות רואה פעם אחת רק את שלב התזכורות */
+function onbPush(){ var can='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window, sa=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true, ios=/iphone|ipad|ipod/i.test(navigator.userAgent), on=0; try{ on=localStorage.getItem('aviel_push')==='1'; }catch(e){}
+  if(ios&&!sa) return 'install'; if(!can||Notification.permission==='denied') return ''; return on&&Notification.permission==='granted'?'':'ask'; }
+function onbPushStep(){ var st=onbPush(); if(!st) return null;
+  if(st==='install') return {t:'תזכורות ממני',h:'<p>באייפון התזכורות עובדות רק כשהאפליקציה על מסך הבית. דקה אחת וזה מאחוריך:</p><ol><li><span>לוחצים על כפתור השיתוף בספארי (ריבוע עם חץ).</span></li><li><span>בוחרים "הוספה למסך הבית".</span></li><li><span>פותחים את האפליקציה מהאייקון ומפעילים תזכורות.</span></li></ol>',b:'הבנתי'};
+  return {t:'תזכורות ממני',h:'<p>שקילה בבוקר, סוף מנוחה באימון, צ׳ק-אין והודעות ממני. בלי זה שום תזכורת לא מגיעה אליך.</p>',b:'הפעלת תזכורות',skip:'לא עכשיו',go:function(){ var pb=document.getElementById('pushBtn'); if(pb) pb.click(); }}; }
+function onbRun(steps,done){ var i=0, s=document.createElement('div'); s.className='sheet onb'; s.setAttribute('role','dialog'); s.setAttribute('aria-modal','true'); s.setAttribute('aria-labelledby','shT');
+  function next(){ i++; if(i>=steps.length){ s.remove(); if(done) done(); } else draw(); }
+  function draw(){ var st=steps[i]; s.innerHTML='<div class="sheet-in">'+(steps.length>1?'<div class="onbn"><span class="num">'+(i+1)+'</span> מתוך <span class="num">'+steps.length+'</span></div>':'')+'<h2 id="shT">'+esc(st.t)+'</h2>'+st.h+'<button type="button" class="onbgo">'+esc(st.b)+'</button>'+(st.skip?'<button type="button" class="linkbtn onbskip">'+esc(st.skip)+'</button>':'')+'</div>';
+    s.querySelector('.onbgo').onclick=function(){ if(st.go) st.go(); next(); }; var sk=s.querySelector('.onbskip'); if(sk) sk.onclick=next; s.querySelector('.onbgo').focus(); }
+  document.body.appendChild(s); draw(); }
+var _renderIntro=render; render=function(){ _renderIntro.apply(this,arguments); if(document.querySelector('.sheet')) return; var seen=0, pseen=0; try{ seen=localStorage.getItem('aviel_intro_v1'); pseen=localStorage.getItem('aviel_onb_push'); }catch(e){}
+  var ps=onbPushStep(), mark=function(k){ try{ localStorage.setItem(k,'1'); }catch(e){} };
+  if(!seen){ var steps=[{t:HELP.intro.t,h:'<ol>'+HELP.intro.l.map(function(x){ return '<li><span>'+esc(x)+'</span></li>'; }).join('')+'</ol>',b:'הבא'}]; if(ps) steps.push(ps);
+    steps.push({t:'הצעד הראשון: שקילה',h:'<p>נשקלים עכשיו ורושמים את המספר. ממנו מתחילים למדוד כל שינוי, ומחר בבוקר ממשיכים מאותו מקום.</p>',b:'לשקילה',skip:'אחר כך',go:function(){ try{ show('home'); var w=document.getElementById('wIn'); if(w){ w.scrollIntoView({block:'center'}); w.focus(); } }catch(e){} }});
+    mark('aviel_onb_push'); onbRun(steps,function(){ mark('aviel_intro_v1'); }); }
+  else if(!pseen&&ps){ mark('aviel_onb_push'); onbRun([ps]); } };
 </script>"""
 THEME_HEAD = "<script>(function(){var t=null;try{t=localStorage.getItem('aviel_theme');}catch(e){}if(t!=='light'&&t!=='dark')t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';document.documentElement.setAttribute('data-theme',t);var m=document.querySelector('meta[name=theme-color]');if(m)m.content=t==='light'?'#f7f3ec':'#0d0d0f';})();</script>"
 THEME_JS = """<script>
@@ -1019,7 +1061,7 @@ man.update({'name': 'AVIEL בטא', 'short_name': 'AVIEL β'})
 for f in ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'hero.jpg', 'wk-push.jpg', 'wk-back.jpg', 'wk-legs.jpg', 'wk-glutes.jpg', 'wk-full.jpg']:
     if (ROOT / f).exists(): shutil.copy(ROOT / f, OUT / f)
 (OUT / 'sw.js').write_text("""// בטא: מטמון + התראות פוש (הודעה נמשכת מהשרת)
-const C = 'aviel-beta-v274-""" + __import__('hashlib').md5(h.encode('utf8')).hexdigest()[:8] + """', API = '""" + API + """';
+const C = 'aviel-beta-v326-""" + __import__('hashlib').md5(h.encode('utf8')).hexdigest()[:8] + """', API = '""" + API + """';
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(['./', 'index.html', 'manifest.webmanifest', 'icon-192.png']))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C && k.indexOf(C.replace(/\d.*$/, '')) === 0).map(k => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener('fetch', e => {
@@ -1036,7 +1078,15 @@ self.addEventListener('push', e => {
   e.waitUntil(token().then(t => fetch(API + '?api=inbox&t=' + encodeURIComponent(t) + '&p=%7B%22sw%22%3A1%7D&_=' + Date.now()).then(r => r.json()))
     .then(j => (j && j.ok) ? j.r : { title: 'AVIEL', body: 'יש לך עדכון באפליקציה' })
     .catch(() => ({ title: 'AVIEL', body: 'יש לך עדכון באפליקציה' }))
-    .then(m => self.registration.showNotification(m.title, { body: m.body, icon: 'icon-192.png', badge: 'icon-192.png', lang: 'he', dir: 'rtl', tag: m.tag || 'aviel', renotify: true, vibrate: [250, 120, 250] })));
+    /* 5.11.26 (אביאל: "חופר"): התראת מנוחה מחליפה את הקודמות (נשארת רק אחת), ואם האפליקציה פתוחה מול העיניים — נסגרת מיד בלי צליל */
+    .then(m => Promise.all([self.registration.getNotifications ? self.registration.getNotifications().catch(() => []) : [], clients.matchAll({ type: 'window', includeUncontrolled: true }).catch(() => [])]).then(x => {
+      const rest = m.tag === 'rest', open = x[1].some(c => c.visibilityState === 'visible');
+      /* 5.11.26: אותה מנוחה הגיעה פעמיים (הטלפון שלח את הבקשה שוב) — השנייה מחליפה את הראשונה בשקט: התראה אחת וצליל אחד */
+      const dup = rest && x[0].some(n => n.tag === 'rest' && Date.now() - (n.timestamp || n.data && n.data.at || 0) < 45000);
+      if (rest) x[0].forEach(n => { if (n.tag === 'rest') n.close(); });
+      return self.registration.showNotification(m.title, { body: m.body, icon: 'icon-192.png', badge: 'icon-192.png', lang: 'he', dir: 'rtl', tag: m.tag || 'aviel', renotify: !dup, silent: rest && (open || dup), vibrate: [250, 120, 250], data: { at: Date.now() } })
+        .then(() => { if (rest && open) return self.registration.getNotifications().then(ns => ns.forEach(n => { if (n.tag === 'rest') n.close(); })).catch(() => {}); });
+    })));
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close();
