@@ -113,6 +113,7 @@ function parseCommand(text) {
   // 22.11.26 (אביאל: "אני כותב לו הכל והוא לא מבין"): כל סדר של שם / מספר טיוטה / נוסח 1-3
   // 22.11.26 (אביאל: "אופציה לקחת את ההודעה שאתה מכין ולערוך אותה"): "ערוך" / "ערוך 2" / "ערוך 2 שני" / "ערוך 584"
   let e = s.match(/^(?:ערוך|ערכי|לערוך|עריכה)(?:\s+([123]))?(?:\s+(#?\d{2,}|[\u0590-\u05FF][\u0590-\u05FF ]*))?(?:\s+([123]))?$/)
+  if (e && e[2] && !/^#?\d/.test(e[2]) && e[2].trim().split(/\s+/).length > 2) e = null // 22.11.26 (סקירה): "ערוך שיהיה קצר יותר" = הוראת תיקון, לא עריכה
   if (e) return { type: 'edit', option: Number(e[1] || e[3] || 1), ref: (e[2] || '').replace('#', '').trim() || null }
   let x = s.match(/^#?(\d{2,})$/) // רק מספר טיוטה: "584"
   const live = (id) => !!load().items[Number(id)] // מספר נחשב לטיוטה רק אם יש כזו ממתינה (אחרת "1400" של פקודת מאמן)
@@ -267,7 +268,11 @@ function unverifiedTimes(draft, said) {
   return out
 }
 // 22.11.26: טיוטה שנדחתה למחר — מאפסים את השעון כדי שלא תפוג אחרי 36 שעות מהיצירה
+// 22.11.26 (סקירה: התאמה לפי שם נכשלת כשהטיוטה נשמרה עם השם מוואטסאפ): הודעות שנשלחו לאדם — לפי צ'אט, 9 ספרות אחרונות של הטלפון, או שם
+function sentFor(who, k = 200) { const pn = String(who.phone || '').replace(/\D/g, '').slice(-9)
+  return recentSent(k).filter((x) => (who.chat_jid && x.chat_jid === who.chat_jid) || (pn && String(x.jid || '').replace(/\D/g, '').slice(-9) === pn) || (who.name && x.name === who.name)) }
+function setField(id, k, v) { const d = load(); if (d.items[id]) { d.items[id][k] = v; save(d) } }
 function touch(id) { const d = load(); if (d.items[id]) { d.items[id].at = new Date().toISOString(); save(d) } }
 function updateText(id, text) { const d = load(); if (d.items[id]) { d.items[id].text = stripEmoji(text); d.items[id].at = new Date().toISOString(); save(d) } }
 
-module.exports = { unverifiedTimes, unverifiedNumbers, numbersIn, touch, pendingForPerson, variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }
+module.exports = { sentFor, setField, unverifiedTimes, unverifiedNumbers, numbersIn, touch, pendingForPerson, variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }

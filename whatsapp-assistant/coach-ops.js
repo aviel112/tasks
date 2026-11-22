@@ -22,7 +22,7 @@ async function findName(t) {
 }
 const nis = (n) => Number(n || 0).toLocaleString('en-US') + ' ₪'
 const dm = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getDate()}.${d.getMonth() + 1}` }
-const ymd = (d) => d.toISOString().slice(0, 10)
+const ymd = (d) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }) // 22.11.26 (סקירה): שעון ישראל, לא UTC
 const OK = /^(1|כן|אוקי|סבבה|מאשר|יאללה|בצע)[.!]?$/, NO = /^(2|לא|בטל|עזוב)[.!]?$/
 const RE = {
   card: /^(?:מה עם|מה המצב (?:של|עם)|מה קורה עם|כרטיס(?: של)?|תראה לי את)\s+(.+?)\s*\??$/,
@@ -36,10 +36,10 @@ const RE = {
   docMenu: /(תפריט|בוקר|ערב|צהריים|ביניים|ארוחה|קלוריות ב|פחמימה|חלבון ב|שומן ב)/,
   docProg: /(תוכנית|תרגיל|סטים|סט |חזרות|אימון [א-ת1-9]|במקום ה)/,
 }
-function isMine(t) { t = String(t || '').trim(); if (PENDING && Date.now() - PENDING.at < 10 * 60e3 && (OK.test(t) || NO.test(t))) return true
-  return RE.brief.test(t) || RE.app.test(t) || RE.card.test(t) || RE.pay.test(t) || RE.renew.test(t) || RE.renew2.test(t) || RE.newc.test(t) || (RE.docVerb.test(t) && (RE.docMenu.test(t) || RE.docProg.test(t)) && !/מאגר/.test(t)) }
+function isMine(t) { t = String(t || '').trim(); if (PENDING && Date.now() - PENDING.at < 5 * 60e3 && (OK.test(t) || NO.test(t))) return true
+  return RE.brief.test(t) || RE.app.test(t) || RE.card.test(t) || RE.pay.test(t) || RE.renew.test(t) || RE.renew2.test(t) || RE.newc.test(t) || (RE.docVerb.test(t) && (RE.docMenu.test(t) || RE.docProg.test(t)) && !/מאגר|יומן|תזכורת|תזכיר|פגישה|לוז|לו"ז/.test(t)) } // 22.11.26 (סקירה): "תוסיף ליומן... בבוקר" זה יומן, לא תפריט
 const pendingAt = () => (PENDING ? PENDING.at : 0)
-const hasPending = () => !!(PENDING && Date.now() - PENDING.at < 10 * 60e3)
+const hasPending = () => !!(PENDING && Date.now() - PENDING.at < 5 * 60e3) // 5 דק' — בזמן הזה התור לא מציג טיוטה חדשה
 // מחזיר true אם טיפל; false = לא פקודה שלו (אין שם מתאמן) → ממשיכים לשיחה הרגילה
 async function ask(text, run) { PENDING = { at: Date.now(), run }; await D.say(text + '\n\nלבצע? *1* כן · *2* לא') }
 
@@ -68,10 +68,10 @@ async function brief(c, header) {
   if (!header) await D.say(`מכין בריף על ${c.name.split(' ')[0]}...`)
   const pn = String(c.phone || '').replace(/\D/g, '').replace(/^0/, '972')
   // 22.11.26: השיחה יושבת לפעמים תחת מזהה lid ולא תחת הטלפון — עדיף הצ'אט שאליו באמת נשלחו הודעות, ואחריו זה שיש לו תיק
-  const cands = [...new Set([(D.drafts.recentSent(200).filter((x) => x.name === c.name).pop() || {}).chat_jid, await D.biz.chatForPhone(pn).catch(() => null), pn + '@s.whatsapp.net'].filter(Boolean))]
+  const cands = [...new Set([(D.drafts.sentFor({ name: c.name, phone: pn }).pop() || {}).chat_jid, await D.biz.chatForPhone(pn).catch(() => null), pn + '@s.whatsapp.net'].filter(Boolean))]
   const jid = cands.find((j) => D.profiles && D.profiles.readProfile(j)) || cands[0] || ''
   const [k, f, p, convo] = await Promise.all([coach('dashboardClientCard', [c.name]).catch(() => null), coach('dashboardWeekFacts', [c.name]).catch(() => null), plan(c).catch(() => null), jid ? D.biz.recentMessages(jid, 40).catch(() => '') : ''])
-  const sent = D.drafts.recentSent(200).filter((x) => x.name === c.name).slice(-6).map((x) => x.at.slice(5, 10) + ': ' + String(x.text).replace(/\n/g, ' / ')).join('\n')
+  const sent = D.drafts.sentFor({ name: c.name, phone: pn, chat_jid: jid }).slice(-6).map((x) => x.at.slice(5, 10) + ': ' + String(x.text).replace(/\n/g, ' / ')).join('\n')
   const prof = jid && D.profiles ? String(D.profiles.readProfile(jid) || '').replace(/^<!--.*-->\n/, '') : ''
   const data = [`לוח: התחלה ${c.start}, ${c.months} חודשים ב-${c.price} ₪, סוף ${c.end} (עוד ${c.daysLeft} ימים), שולם ${c.paid} מתוך ${c.total}, יתרה ${c.balance}, מטרה ${c.goal || '—'}, פגישה אחרונה ${c.lastMeeting || '—'}, הבאה ${c.nextMeeting || '—'}`,
     `משקל: התחלה ${k && k.first}, שקילות אחרונות ${JSON.stringify(((k && k.spark) || []).slice(-10).map((x) => x.d + ':' + x.kg))}`,

@@ -45,5 +45,10 @@ const P = (n, ph, extra) => ({ name: n, phone: ph, chat_jid: ph + '@lid', ...ext
   await scenario({ 1: P('עידן', '1') }, [{ at: y, chat_jid: '1@lid', jid: '1' }], async ({ draftQueuePush, T, out }) => {
     draftQueuePush(1, 'IDAN'); await T(); eq('הודעה מאתמול לא חוסמת היום', out, ['IDAN'])
   })
+  await scenario({ 1: P('א', '1'), 2: P('ב', '2'), 3: P('ג', '3'), 4: P('ד', '4') }, [], async ({ draftQueuePush, draftQueueTick, draftQueueSkip, T, out }) => {
+    draftQueuePush(1, 'A'); draftQueueTick(); draftQueuePush(2, 'B'); await T(); draftQueueSkip(); draftQueuePush(3, 'C'); draftQueueTick(); draftQueuePush(4, 'D'); await T(); await T()
+    const q = JSON.parse(fs.readFileSync(DQ_FILE())); const ids = [q.cur, ...(q.items || []).map((x) => x.id)].filter(Boolean).map(String).sort()
+    eq('מרוץ: אף טיוטה לא נמחקה מהתור', ids, ['1', '2', '3', '4']); eq('מרוץ: הוצגו רק שתיים (ראשונה + אחרי הבא)', out.length, 2)
+  })
   console.log(fail ? `${fail} בדיקות תור נכשלו` : 'בדיקות התור עברו'); process.exit(fail ? 1 : 0)
 })()

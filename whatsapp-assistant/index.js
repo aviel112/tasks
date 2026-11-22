@@ -75,12 +75,13 @@ const routes = require('./routes') // 19.11.26: פיצול ההודעות לאב
 let ROUTE_REPLY = { gid: '', until: 0 } // אחרי הודעה של אביאל בקבוצה: 3 דקות שבהן המענה חוזר לאותה קבוצה
 // 22.11.26 (אביאל: "אל תשלח יותר הודעות על מתאמנים בפרטי, רק בקבוצה"): כל הודעה לאביאל שמזכירה מתאמן בשם → קבוצת המתאמנים
 let TRAINEE_RE = null
-async function refreshTraineeNames() { try { const l = await coachApi('dashboardList'); const ns = new Set(); for (const c of (l && l.clients) || []) { const n = String(c.name || '').trim(); if (!n) continue; ns.add(n); const f = n.split(' ')[0]; if (f.length >= 3) ns.add(f) }
+const COMMON_FIRST = new Set(['שני', 'רז', 'טל', 'גל', 'חן', 'אור', 'שחר', 'בר', 'ים', 'דור', 'שקד', 'נוי', 'עדן']) // 22.11.26 (סקירה): "יום שני" לא שם של מתאמנת
+async function refreshTraineeNames() { try { const [l, tg] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))]); const ns = new Set(); for (const c of (l && l.clients) || []) { const n = String(c.name || '').trim(); if (!n || (tg[n] || []).includes('משפחה')) continue; ns.add(n); const f = n.split(' ')[0]; if (f.length >= 3 && !COMMON_FIRST.has(f)) ns.add(f) }
   if (ns.size) TRAINEE_RE = new RegExp('(^|[^\u0590-\u05FF])[ולב]?(' + [...ns].sort((a, b) => b.length - a.length).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?=$|[^\u0590-\u05FF])') } catch (e) { console.error('[trainee-names]', e.message) } }
 setTimeout(refreshTraineeNames, 5000); setInterval(refreshTraineeNames, 30 * 60 * 1000)
 const aboutTrainee = (t) => !!(TRAINEE_RE && TRAINEE_RE.test(String(t || '')))
 const OUT_SEEN = [] // הודעות שיצאו בפועל (message_create), 60 שניות אחרונות
-const TECH_RE = /```|python3? -c|\bcd ~\/|במסוף|בטרמינל|תריץ את (?:הפקודה|זה)|npm (?:run|install)|node [\w./-]+\.js/ // 22.11.26: אביאל לא מקבל קוד/פקודות
+const TECH_RE = /```|python3? -c|\bcd ~\/|תריץ (?:את )?(?:הפקודה|זה|אותה|אותו)(?: במסוף| בטרמינל)?|(?:פקודה|הפקודה) (?:במסוף|בטרמינל)|npm (?:run|install)|node [\w./-]+\.js/ // 22.11.26: אביאל לא מקבל קוד/פקודות
 { const _send = client.sendMessage.bind(client); client.sendMessage = (to, ...r) => { let dest = to
     if (to === config.owner && typeof r[0] === 'string' && TECH_RE.test(r[0])) { try { fs.appendFileSync(path.join(ROOT, 'brain', 'tech-todo.md'), `\n## ${new Date().toISOString()}\n${r[0].slice(0, 3000)}\n`) } catch {} console.log('[tech-filter] held a technical message for Claude Code'); r[0] = toWhatsApp('משהו טכני לא הצליח אצלי. העברתי לתיקון, לא צריך לעשות כלום.') }
     try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); let cat = routes.classify(txt); if ((!cat || cat === 'biz') && aboutTrainee(txt) && !/^\*?(ליד|5 לסגור)/.test(txt.replace(/^[\u200b\s]+/, ''))) cat = 'coach'; dest = routes.gidFor(cat) || to } } } catch (e) { dest = to }
@@ -482,7 +483,7 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   const lines = parsed
     ? [head, quoteBlock, '', parsed.alt ? '*1.*' : '*התשובה שאשלח:*', parsed.draft, ...(parsed.alt ? ['', '*2.*', parsed.alt] : []), ...(parsed.alt2 ? ['', '*3.*', parsed.alt2] : []), ...(unvLine ? ['', unvLine] : []), '', drafts.approvalHint(id, heb || name, !!parsed.alt, !!parsed.alt2)]
     : [head, quoteBlock, '', drafts.stripEmoji(answer)]
-  if (id) { draftQueuePush(id, lines.join('\n'), config.owner, !hold && !!String(who.content || '').trim()); return true } // 22.11.26: הכל בתור, אחת בכל פעם; לקוח שכתב — לפני טיוטות יזומות
+  if (id) { draftQueuePush(id, lines.join('\n'), config.owner, !hold && !!String(who.content || '').trim()); return id } // 22.11.26: מחזיר את מספר הטיוטה (הסבב השבועי מקפל לתוכה רק אם נוצרה) // 22.11.26: הכל בתור, אחת בכל פעם; לקוח שכתב — לפני טיוטות יזומות
   let sent; try { sent = await client.sendMessage(config.owner, toWhatsApp(lines.join('\n'))) } catch (e) { if (id) drafts.remove(id); throw e } // בלי התראה אין טיוטה (אחרת היא חוסמת את הלקוח 36 שעות)
   if (id && sent?.id?._serialized) drafts.setAlertMsgId(id, sent.id._serialized)
   if (id) offerDraft(id)
@@ -706,6 +707,14 @@ async function dropAnsweredDrafts() {
 }
 
 const LIVE_CHAT_MIN = 20 // 22.11.26
+// 22.11.26 (סקירה: בדיקת המשבר רצה רק אחרי כללים אחרים ורק 8:00–23:00): סריקה נפרדת כל 2 דקות, בכל שעה, לפני כל כלל אחר. התראה אחת לכל הודעה
+const CRISIS_PATH = path.join(ROOT, 'crisis-alerted.json')
+async function crisisAlert(w) { let st = {}; try { st = JSON.parse(fs.readFileSync(CRISIS_PATH, 'utf8')) } catch {} if (st[w.id]) return false
+  st[w.id] = new Date().toISOString(); fs.writeFileSync(CRISIS_PATH, JSON.stringify(st))
+  await client.sendMessage(config.owner, toWhatsApp(`*דחוף · ${biz.nameOf(w)}*\nכתב/ה משהו שנשמע כמו מצוקה רצינית. כדאי להתקשר עכשיו, לא לכתוב.\nאם יש סכנה מיידית: מד"א 101 · ער"ן 1201`)).catch(() => {}); console.log('[crisis] alert', biz.nameOf(w)); return true }
+async function crisisScan() { if (!config.owner || !clientReady) return
+  try { for (const w of await biz.waitingForReply(0, 1)) { const recent = await biz.recentMessages(w.chat_jid, 4).catch(() => String(w.content || '')); if (CRISIS_RE.test(String(w.content || '')) || CRISIS_RE.test(recent.split('\n').filter((l) => !l.startsWith('אביאל:')).join(' '))) await crisisAlert(w) } } catch (e) { console.error('[crisis-scan]', e.message) } }
+cron.schedule('*/2 * * * *', crisisScan, { timezone: 'Asia/Jerusalem' })
 async function checkWaitingClients() {
   if (!config.owner || !clientReady || waitingBusy || !isActive(new Date()) || Date.now() < waitingPauseUntil) return
   waitingBusy = true
@@ -742,7 +751,7 @@ async function checkWaitingClients() {
       const leadHot = !allowedQ && LEAD_HOT_RE.test(streak) && (await biz.messageCount(w.chat_jid).catch(() => 99)) < 40
       const slots = leadHot ? await freeSlots().catch(() => []) : []
       const distress = DISTRESS_RE.test(streak), pain = PAIN_RE.test(streak)
-      if (CRISIS_RE.test(streak)) { await client.sendMessage(config.owner, toWhatsApp(`*דחוף · ${biz.nameOf(w)}*\nכתב/ה משהו שנשמע כמו מצוקה רצינית. כדאי להתקשר עכשיו, לא לכתוב.\nאם יש סכנה מיידית: מד"א 101 · ער"ן 1201`)).catch(() => {}); console.log('[crisis] alert', biz.nameOf(w)); continue }
+      if (CRISIS_RE.test(streak)) { await crisisAlert(w); continue } // בלי טיוטה רגילה להודעת משבר
       let progNote = ''; if (pain) { try { const nm = (await coachOps.findName(biz.nameOf(w))) || {}; const pi = nm.name ? await coachOps.programInfo(nm.name) : null; if (pi && !pi.hasNote) progNote = `\nהתוכנית באפליקציה${pi.date ? ' מ-' + pi.date : ''} בלי הערה על הכאב. אם צריך: "תוסיף ל${nm.name.split(' ')[0]} בתוכנית הערה: ..."` } catch (e) {} }
       let photoNote = ''
       // 22.11.26 (עידו שלח תמונה והטיוטה ענתה "לא מופיעה בתוכן"): כל תמונה טרייה מהמתאמן נכנסת לטיוטה, לא רק בשאלת "מותר?"
@@ -911,7 +920,7 @@ const proofStory = require('./proof-story') // 22.11.26: תמונת סטורי �
 async function weeklyCheckin(opts = {}) {
   markRan('checkin')
   if (!config.owner || !clientReady || !(await biz.bridgeAlive())) return
-  const [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))])
+  let list, tags; try { [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))]) } catch (e) { markRanKey('checkin', ''); console.error('[checkin] board failed, will retry', e.message); return } // 22.11.26 (סקירה)
   const pn = (raw) => { let d = String(raw || '').replace(/\D/g, ''); if (d.startsWith('972')) return d; if (d.startsWith('0')) d = d.slice(1); return /^5\d{8}$/.test(d) ? '972' + d : '' }
   const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה') && (!opts.only || opts.only.includes(c.name)))
   if (!rows.length) return
@@ -936,7 +945,8 @@ async function weeklyCheckin(opts = {}) {
         hold: true,
         noQuote: true,
       })
-      if (ok) { made++; open.forEach((d) => drafts.remove(d.id)); if (open.length) console.log('[checkin] folded', open.length, 'into', first) } else skipped.push(first)
+      if (typeof ok === 'number') { made++; const said = open.filter((d) => d.clientText).map((d) => d.clientText).join('\n'); if (said) drafts.setField(ok, 'clientText', said) // תשובה שהתקפלה נשארת "תשובה ללקוח" (לא נדחית למחר ולא נמחקת)
+        open.forEach((d) => drafts.remove(d.id)); if (open.length) console.log('[checkin] folded', open.length, 'into', first) } else if (ok) made++; else skipped.push(first)
     } catch (e) { console.error('[checkin]', c.name, e.message); skipped.push(first + ' (תקלה)') }
   }
   if (opts.only) { try { const o = JSON.parse(fs.readFileSync(WKSUM_PATH, 'utf8')); o.items = o.items.filter((x) => !opts.only.includes(x.name)).concat(rows.map((c) => ({ name: c.name, first: String(c.name).split(' ')[0], phone: pn(c.phone) }))); fs.writeFileSync(WKSUM_PATH, JSON.stringify(o)) } catch {}
@@ -964,16 +974,22 @@ async function weeklyCheckin(opts = {}) {
 const DQ_PATH = path.join(ROOT, 'draft-queue.json')
 const dqLoad = () => { try { return JSON.parse(fs.readFileSync(DQ_PATH, 'utf8')) } catch { return { cur: null, items: [], total: 0, shown: 0 } } }
 const dqSave = (q) => fs.writeFileSync(DQ_PATH, JSON.stringify(q))
-function draftQueuePush(id, text, to, front, img) { const q = dqLoad(); if (!q.items.length && !q.cur) { q.total = 0; q.shown = 0 }
+// 22.11.26 (סקירה: tick טוען, מחכה לשליחה, ושומר — ודורס הוספות שקרו בינתיים): כל שינוי בתור רץ בתורו, אחד אחרי השני
+let DQ_LOCK = Promise.resolve()
+const dqLocked = (fn) => (DQ_LOCK = DQ_LOCK.then(fn, fn).catch((e) => console.error('[dq]', e.message)))
+function draftQueuePush(id, text, to, front, img) { return dqLocked(() => draftQueuePush0(id, text, to, front, img)) }
+function draftQueuePush0(id, text, to, front, img) { const q = dqLoad(); if (!q.items.length && !q.cur) { q.total = 0; q.shown = 0 }
   const it = { id, text, to: to || config.owner }; if (img) it.img = img; if (front) { const k = q.items.findIndex((x) => !x.front); it.front = true; q.items.splice(k < 0 ? q.items.length : k, 0, it) } else q.items.push(it)
   q.total++; dqSave(q); setTimeout(draftQueueTick, 500) }
 // "הבא" / "דלג": מעבירים את הנוכחית לסוף התור (היא נשארת פתוחה לאישור לפי שם או מספר)
 function draftQueueSkip() { const q = dqLoad(); if (!q.items.length && !q.cur) return false
   if (!q.items.some((x) => x.id !== q.cur && drafts.get(x.id) && !(x.notBefore && Date.now() < x.notBefore))) { client.sendMessage(config.owner, toWhatsApp('זה האחרון בתור להיום. אפשר לענות עליו, או *לא* כדי לבטל.')).catch(() => {}); return true } // 22.11.26: "הבא" על האחרון הציג אותו שוב
-   if (q.cur && drafts.get(q.cur) && q.curText) q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true, shows: (q.curShows || 1) + 1 }); q.cur = null; dqSave(q); draftQueueTick(); return true }
+   dqLocked(() => { const q2 = dqLoad(); if (q2.cur && drafts.get(q2.cur) && q2.curText) q2.items.push({ id: q2.cur, text: q2.curText, to: q2.curTo, again: true, shows: (q2.curShows || 1) + 1 }); q2.cur = null; dqSave(q2) }).then(() => draftQueueTick()); return true }
 let dqBusy = false
-async function draftQueueTick() {
+function draftQueueTick() { return dqLocked(draftQueueTick0) }
+async function draftQueueTick0() {
   if (dqBusy || !config.owner || !clientReady) return
+  if (typeof coachOps !== 'undefined' && coachOps.hasPending()) return // 22.11.26 (סקירה): פקודה מחכה ל-1 — לא מציגים טיוטה חדשה, כדי ש-1 יהיה חד-משמעי
   // 22.11.26 (ההודעה לעומר נדרסה כשנכתבה ישירות לקובץ התור): הוספה מבחוץ = קובץ בתיקיית queue-inbox; רק התהליך הזה כותב ל-draft-queue.json
   try { const dir = path.join(ROOT, 'queue-inbox'); if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json')).sort()) { const fp = path.join(dir, f); try { const x = JSON.parse(fs.readFileSync(fp, 'utf8')); fs.rmSync(fp); if (x && x.id && drafts.get(x.id)) draftQueuePush(x.id, x.text, x.to || config.owner, !!x.front, x.img) } catch (e) { console.error('[dq-inbox]', f, e.message); try { fs.renameSync(fp, fp + '.bad') } catch {} } } } catch (e) {}
   const q = dqLoad(); if (q.cur && drafts.get(q.cur) && Date.now() - (q.curAt || 0) < 15 * 60e3) return // אביאל עוד לא טיפל בנוכחית
@@ -1013,7 +1029,7 @@ setInterval(draftQueueTick, 15 * 1000)
 async function renewalBoard(force) {
   markRan('renewboard')
   if (!config.owner || !clientReady) return
-  const [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))])
+  let list, tags; try { [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))]) } catch (e) { markRanKey('renewboard', ''); console.error('[renewboard] board failed, will retry', e.message); return }
   let adv = {}; try { adv = JSON.parse(fs.readFileSync(path.join(ROOT, 'advisor-state.json'), 'utf8')).renewals || {} } catch {}
   let sent = []; try { sent = JSON.parse(fs.readFileSync(path.join(ROOT, 'sent-log.json'), 'utf8')) } catch {}
   const pn = (raw) => { let d = String(raw || '').replace(/\D/g, ''); if (d.startsWith('972')) return d; if (d.startsWith('0')) d = d.slice(1); return /^5\d{8}$/.test(d) ? '972' + d : '' }
@@ -1027,7 +1043,7 @@ async function renewalBoard(force) {
     const stages = Object.entries(st).filter(([, v]) => /^\d{4}-/.test(v)).sort((a, b) => a[1] < b[1] ? -1 : 1)
     const firstStage = stages[0] && stages[0][1]
     const RENEW_RE = /התהליך (שלנו )?נגמר|ממשיכים|למבנה של 3 חודשים|להמשיך איתי|חידוש|נשאר לנו|מסיימ/ // רק הודעת חידוש אמיתית, לא כל הודעה
-    const mine = sent.filter((x) => x.name === c.name && RENEW_RE.test(String(x.text || '')) && Date.now() - Date.parse(x.at) < 40 * 864e5)
+    const mine = drafts.sentFor({ name: c.name, phone: pn(c.phone) }).filter((x) => RENEW_RE.test(String(x.text || '')) && Date.now() - Date.parse(x.at) < 40 * 864e5)
     let replied = null
     if (mine.length) { try { const jid = mine[mine.length - 1].chat_jid || (await biz.chatForPhone(pn(c.phone))); replied = (await biz.inboundSince(jid, mine[mine.length - 1].at)).length > 0 } catch {} }
     const bal = Number(c.balance) || 0, fem = await advisor.femOf(pn(c.phone), c.name).catch(() => false)
@@ -1048,13 +1064,13 @@ const Q_RE = /\?|(^|\s)(מה|איך|מתי|למה|כמה|אפשר|מותר|כד�
 async function unansweredQuestions() {
   markRan('unanswered')
   if (!config.owner || !clientReady || !(await biz.bridgeAlive())) return
-  const [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))])
+  let list, tags; try { [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))]) } catch (e) { markRanKey('unanswered', ''); console.error('[unanswered] board failed, will retry', e.message); return }
   const pn = (raw) => { let d = String(raw || '').replace(/\D/g, ''); if (d.startsWith('972')) return d; if (d.startsWith('0')) d = d.slice(1); return /^5\d{8}$/.test(d) ? '972' + d : '' }
   const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה'))
   const sent = drafts.recentSent(200), ts = (x) => Date.parse(String(x).replace(' ', 'T')); let made = 0
   for (const c of rows) {
     if (made >= 5) break
-    const phone = pn(c.phone), mine = sent.filter((x) => x.name === c.name), jid = (mine.length && mine[mine.length - 1].chat_jid) || (await biz.chatForPhone(phone).catch(() => null))
+    const phone = pn(c.phone), mine = drafts.sentFor({ name: c.name, phone }), jid = (mine.length && mine[mine.length - 1].chat_jid) || (await biz.chatForPhone(phone).catch(() => null))
     if (!jid || drafts.pendingForPerson(jid, phone).length) continue
     const lastMe = Math.max(...[await biz.lastFromMe(jid).catch(() => null), ...mine.map((x) => x.at)].filter(Boolean).map(ts), 0)
     const inb = (await biz.inboundSince(jid, new Date(Math.max(lastMe, Date.now() - 7 * 864e5)).toISOString()).catch(() => [])).filter((r) => Q_RE.test(String(r.content || '')))
@@ -1088,7 +1104,7 @@ async function weeklyFollowup() {
   let sent = []; try { sent = JSON.parse(fs.readFileSync(path.join(ROOT, 'sent-log.json'), 'utf8')) } catch {}
   const quiet = []
   for (const it of st.items) {
-    const s = sent.filter((x) => x.name === it.name && !x.revoked && Date.parse(x.at) > Date.parse(st.at)).slice(-1)[0]
+    const s = drafts.sentFor({ name: it.name, phone: it.phone }).filter((x) => !x.revoked && Date.parse(x.at) > Date.parse(st.at)).slice(-1)[0]
     if (!s) continue // הסיכום לא נשלח (אביאל ביטל או לא אישר)
     const jid = s.chat_jid || (await biz.chatForPhone(it.phone).catch(() => null)) || `${it.phone}@s.whatsapp.net`
     if ((await biz.inboundSince(jid, s.at).catch(() => [1])).length) continue // ענה/תה
@@ -1621,7 +1637,8 @@ const chatIdOf = (msg) => (msg.fromMe ? msg.to : msg.from)
 const MSEEN_PATH = path.join(ROOT, 'seen-msgs.json')
 let MSEEN = {}, MSEEN_FIRST = !fs.existsSync(MSEEN_PATH); try { MSEEN = JSON.parse(fs.readFileSync(MSEEN_PATH, 'utf8')) } catch {}
 let seenDirty = false
-const markSeen = (msg) => { const id = msg && msg.id && msg.id._serialized; if (!id || MSEEN[id]) return; MSEEN[id] = msg.timestamp || Math.floor(Date.now() / 1000); seenDirty = true }
+const markSeen = (msg) => { const id = msg && msg.id && msg.id._serialized; if (!id || MSEEN[id]) return; MSEEN[id] = msg.timestamp || Math.floor(Date.now() / 1000); seenDirty = true
+  if (config.owner && (msg.from === config.owner || msg.author === config.owner)) { try { fs.writeFileSync(MSEEN_PATH, JSON.stringify(MSEEN)); seenDirty = false } catch {} } } // 22.11.26 (סקירה): פקודה של אביאל נרשמת מיד — קריסה לא תגרום לביצוע כפול
 setInterval(() => { if (!seenDirty) return; seenDirty = false; const cut = Date.now() / 1000 - 2 * 86400; for (const k of Object.keys(MSEEN)) if (MSEEN[k] < cut) delete MSEEN[k]; try { fs.writeFileSync(MSEEN_PATH, JSON.stringify(MSEEN)) } catch {} }, 5000)
 async function recoverMissed() {
   if (!config.owner) return
