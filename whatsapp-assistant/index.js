@@ -79,9 +79,13 @@ async function refreshTraineeNames() { try { const l = await coachApi('dashboard
   if (ns.size) TRAINEE_RE = new RegExp('(^|[^\u0590-\u05FF])[ולב]?(' + [...ns].sort((a, b) => b.length - a.length).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?=$|[^\u0590-\u05FF])') } catch (e) { console.error('[trainee-names]', e.message) } }
 setTimeout(refreshTraineeNames, 5000); setInterval(refreshTraineeNames, 30 * 60 * 1000)
 const aboutTrainee = (t) => !!(TRAINEE_RE && TRAINEE_RE.test(String(t || '')))
+const OUT_SEEN = [] // הודעות שיצאו בפועל (message_create), 60 שניות אחרונות
 { const _send = client.sendMessage.bind(client); client.sendMessage = (to, ...r) => { let dest = to
     try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); let cat = routes.classify(txt); if ((!cat || cat === 'biz') && aboutTrainee(txt) && !/^\*?(ליד|5 לסגור)/.test(txt.replace(/^[\u200b\s]+/, ''))) cat = 'coach'; dest = routes.gidFor(cat) || to } } } catch (e) { dest = to }
-    return _send(dest, ...r).catch((e) => { if (dest !== to) { console.error('[routes] group send failed, falling back', e.message); return _send(to, ...r) } throw e }) } } // 5.11.26 מענה בקבוצת העדכונים
+    const body = typeof r[0] === 'string' ? r[0] : ''
+    return _send(dest, ...r).catch(async (e) => { // 22.11.26: ווטסאפ לפעמים זורק שגיאה אחרי שההודעה כבר יצאה → בודקים לפני שמנסים שוב (אחרת כפילויות)
+      if (body) { await new Promise((res) => setTimeout(res, 4000)); const hit = OUT_SEEN.find((x) => x.to === dest && x.body === body && Date.now() - x.at < 60000); if (hit) { console.log('[send] error but delivered, not resending'); return hit.msg } }
+      if (dest !== to) { console.error('[routes] group send failed, falling back', e.message); return _send(to, ...r) } throw e }) } } // 5.11.26 מענה בקבוצת העדכונים
 
 // ── פעולות אמיתיות שהמוח מבקש בפורמט מובנה (לא קוד חופשי) ──
 const REM_PATH = path.join(ROOT, 'reminders.json')
@@ -458,7 +462,7 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   const said = saidFull.replace(/\s+/g, ' ').slice(0, 160)
   const id = parsed ? drafts.add({ chat_jid: who.chat_jid, phone: who.phone, name, alias: heb, text: parsed.draft, alt: parsed.alt, alt2: parsed.alt2 || '', clientText: saidFull, risk: parsed.risk }) : null
   // שגרתי → נכנס לסבב הבא (12/16/20) במקום להקפיץ עכשיו
-  if (id && batchable && parsed.risk === 'low') {
+  if (false && id && batchable && parsed.risk === 'low') { // 22.11.26: בוטל — גם שגרתיות עוברות בתור אחת אחת
     drafts.setBatch(id, { shown, said })
     return true
   }
@@ -1871,6 +1875,7 @@ function onIncoming(msg) {
 
 client.on('message', onIncoming) // הודעות נכנסות (מהטלפון השני)
 client.on('message_create', (msg) => {
+  if (msg.fromMe) { OUT_SEEN.push({ to: msg.to, body: msg.body, msg, at: Date.now() }); while (OUT_SEEN.length > 50) OUT_SEEN.shift() }
   if (msg.fromMe) onIncoming(msg) // הודעות שאביאל שולח מהטלפון המקושר עצמו
 })
 
