@@ -540,6 +540,12 @@ setTimeout(checkBusinessLeads, 90 * 1000)
 // הודעה שנכנסה בלילה מתחילה "לתקתק" רק מ-10:00. בשבת לא מתריעים (מוצ"ש ממשיך מאיפה שעצר).
 const FILE_RE = /(תשלח|תשלחי|שלח|אין לי|לא מוצא|לא מוצאת|איפה).{0,25}(תפריט|תוכנית|התוכנית|התפריט|הקובץ|המסמך)|(תפריט|תוכנית) (מעודכן|מעודכנת|חדש|חדשה)/
 const LEAD_HOT_RE = /כמה (זה )?עולה|מחיר|עלות|ליווי|להתחיל|להצטרף|מעוניין|מעוניינת|רוצה להתאמן|איך מתחילים|מתחיל|price|פרטים על/i
+// 22.11.26 (עומר: "אכלתי כמו בהמה... אין לי כוח לזה כבר"): מצוקה/נפילה → קדימות וניסוח שמוריד מההתרסקות; משבר אמיתי → התראה דחופה בלי טיוטה
+const DISTRESS_RE = /(אין לי כוח|נשבר|נשברתי|מתוסכל|תסכול|אמוק|כמו בהמה|זללתי|התפוצצתי|בולמוס|מדכא|מייאש|מיואש|רוצה לוותר|רוצה להפסיק|שונא את עצמי|שונאת את עצמי|אכלתי הכל|אכלתי כל מה|לא מצליח|לא מצליחה|בלופ|נכשלתי)/
+const DISTRESS_RULES = 'המתאמן/ת בנפילה או מתוסכל/ת. התשובה: משפט אמפתיה קצר בלי הטפה ובלי שיפוט; נתון אמיתי אחד מ"המספרים של המתאמן" שמראה התקדמות (למשל כמה ירד מההתחלה) אם יש; צעד אחד קטן — הארוחה הבאה רגילה, בלי לפצות ובלי לרעוב. לא "תהיה מושלם", לא "תינעל", לא רשימת כללים. 2–4 שורות.'
+const CRISIS_RE = /(לא רוצה לחיות|להתאבד|לפגוע בעצמי|אין טעם לחיות|לגמור עם עצמי)/
+// 22.11.26 (שחף אחרי השתלה, עומר עם הכתף): כאב/פציעה/ניתוח → לבדוק אם התוכנית נכתבה לפני
+const PAIN_RE = /(כאב|כואב|כואבת|פציעה|נפצעתי|נקע|דלקת|צביטה|ניתוח|השתלה|רופא אסר|פיזיו|נתפס לי|תפוס)/
 const ALLOWED_RE = /מותר|אפשר לאכול|יכול לאכול|יכולה לאכול|אפשר לשתות|להחליף ב|במקום ה|זה בסדר ש|מה דעתך על|זה טוב\?|זה בסדר\?/
 const ACTIVE_FROM = 8, ACTIVE_TO = 23
 const WAIT_MINUTES = Number(config.waitingMinutes ?? 3) // דקות שקט מאז ההודעה האחרונה של הלקוח
@@ -730,6 +736,9 @@ async function checkWaitingClients() {
       // ליד שמתעניין (מחיר/להתחיל) — להציע שיחת היכרות עם שני זמנים פנויים אמיתיים
       const leadHot = !allowedQ && LEAD_HOT_RE.test(streak) && (await biz.messageCount(w.chat_jid).catch(() => 99)) < 40
       const slots = leadHot ? await freeSlots().catch(() => []) : []
+      const distress = DISTRESS_RE.test(streak), pain = PAIN_RE.test(streak)
+      if (CRISIS_RE.test(streak)) { await client.sendMessage(config.owner, toWhatsApp(`*דחוף · ${biz.nameOf(w)}*\nכתב/ה משהו שנשמע כמו מצוקה רצינית. כדאי להתקשר עכשיו, לא לכתוב.\nאם יש סכנה מיידית: מד"א 101 · ער"ן 1201`)).catch(() => {}); console.log('[crisis] alert', biz.nameOf(w)); continue }
+      let progNote = ''; if (pain) { try { const nm = (await coachOps.findName(biz.nameOf(w))) || {}; const pi = nm.name ? await coachOps.programInfo(nm.name) : null; if (pi && pi.date && !pi.hasNote) progNote = `\nהתוכנית באפליקציה מ-${pi.date}, בלי הערה על הכאב. אם צריך: "תוסיף ל${nm.name.split(' ')[0]} בתוכנית הערה: ..."` } catch (e) {} }
       let photoNote = ''
       // 22.11.26 (עידו שלח תמונה והטיוטה ענתה "לא מופיעה בתוכן"): כל תמונה טרייה מהמתאמן נכנסת לטיוטה, לא רק בשאלת "מותר?"
       const freshImgs = await biz.recentImages(w.chat_jid, allowedQ ? 45 : 20).catch(() => [])
@@ -746,18 +755,18 @@ async function checkWaitingClients() {
       const sent = await alertWithDraft({
         title: 'מחכה לך בעסקי',
         who: w,
-        batchable: !leadHot && !allowedQ && !fileQ && !photoNote,
+        batchable: !leadHot && !allowedQ && !fileQ && !photoNote && !distress && !pain,
         allowTools: allowedQ || fileQ || !!photoNote, // תמונה = המוח צריך Read כדי לראות אותה
         situation: `מתאמן/ליד כתב לווטסאפ העסקי של אביאל ב-${ISR_TIME(w.timestamp)}.` + (allowedQ ? ' זו שאלה של "מותר לי?" / "אפשר לאכול?".' : '') + (photoNote && !allowedQ ? photoNote.replace('(מנה, כמות משוערת)', '(מה רואים בתמונה: צלחת, מסך, משקל, תוצאה — ולענות עליה עניינית, לא "התמונה לא מופיעה")') : ''),
-        headline: leadHot ? `מתעניין: "${String(w.content || '').slice(0, 80)}" (לבדוק)` : '',
-        extraRules: fileQ
+        headline: (leadHot ? `מתעניין: "${String(w.content || '').slice(0, 80)}" (לבדוק)` : distress ? '*נפילה / מצוקה* (לבדוק)' : '') + progNote,
+        extraRules: (distress ? DISTRESS_RULES + ' ' : '') + (fileQ
           ? 'המתאמן מבקש קובץ (תפריט/תוכנית). למצוא אותו ב-Google Drive: חיפוש בתיקיית המתאמנים (folder id 1BgKSHeNMxfePdv0A7D-ZOLZqn3SZqV9g) או לפי השם הפרטי + "תפריט"/"תוכנית", לבחור את העדכני ביותר, ולבדוק עם get_file_permissions שיש גישה למי שיש לו קישור. ' +
             'אם יש גישה — לשים בטיוטה שורה קצרה + הקישור (webViewLink). אם אין גישה או לא נמצא — טיוטה קצרה "שולח לך עכשיו" ובשורה הראשונה (מה הוא רוצה) לציין לאביאל: "הקובץ לא משותף/לא נמצא: <קישור או שם>". עד 4 קריאות כלים, קריאה בלבד.'
           : leadHot
           ? `הליד מתעניין. המטרה: לקבוע שיחת היכרות של 10 דקות, לא למכור בהודעה. ${slots.length ? `להציע בדיוק את שני הזמנים האלה: ${slots.join(' או ')}, ולשאול מה מתאים לו, ושאם לא — שיגיד מתי כן.` : 'לשאול מתי נוח לו לשיחה קצרה של 10 דקות, בוקר או ערב.'} בלי מחירים בהודעה הזו (אם שאל על מחיר — לומר שבשיחה הוא יקבל תשובה מדויקת לפי מה שהוא צריך). חם, בטוח, קצר.`
           : allowedQ
           ? 'חובה לבדוק מול התפריט שלו לפני שעונים: (1) סעיף "התוכנית הנוכחית" בתיק; (2) אם זה לא מספיק — חיפוש אחד ב-Google Drive של שם הלקוח (למשל "תפריט " + שם פרטי) וקריאת קובץ התפריט/התוכנית שלו (עד 3 קריאות כלים, קריאה בלבד); (3) לענות לפי התפריט: מותר / לא / כן אבל בכמות X, ומה להחליף או להוריד במקום. אם אין תפריט בשום מקום — לענות לפי העקרונות שאביאל נתן לו בשיחה, ולומר בטיוטה שזה לפי מה שסיכמתם. לא להמציא כמויות.' + photoNote
-          : 'דיווח של מתאמן (מה אכל, משקל, תמונה, צ\'ק-אין), שאלה או בקשה — תמיד צריכים תשובה עניינית.',
+          : 'דיווח של מתאמן (מה אכל, משקל, תמונה, צ\'ק-אין), שאלה או בקשה — תמיד צריכים תשובה עניינית.'),
       }).catch((e) => { if (isLimitError(e)) { if (!drafts.pendingForChat(w.chat_jid, w.phone, true)) unmarkNudged(w, prevNudge); throw e } console.error('[biz-waiting] skip', biz.nameOf(w), e.message); return false }) // מגבלה: לנסות שוב אחרי הפסקה; תקלה אחרת: ממשיכים ללקוח הבא (לא חוסמים את כולם)
       console.log('[biz-waiting]', sent ? 'nudged:' : 'skipped:', biz.nameOf(w))
     }
@@ -1027,6 +1036,36 @@ async function renewalBoard(force) {
   await client.sendMessage(config.owner, toWhatsApp(L.join('\n'))).catch(() => {})
 }
 cron.schedule('0 10 * * 1', () => renewalBoard(false), { timezone: 'Asia/Jerusalem' })
+
+// ── שאלות שלא נענו (22.11.26, אביאל בחר "שאלות שלא נענו"; עומר שאל על הכתף ב-20.11 ונשאר בלי תשובה) ──
+// כל בוקר 9:20 (א'-ו'): שאלה של מתאמן פעיל שמחכה 20 שעות עד 7 ימים בלי שום הודעה מאביאל אחריה → טיוטת תשובה בתור. עד 5 ביום
+const Q_RE = /\?|(^|\s)(מה|איך|מתי|למה|כמה|אפשר|מותר|כדאי|צריך|האם)(\s|$)/
+async function unansweredQuestions() {
+  markRan('unanswered')
+  if (!config.owner || !clientReady || !(await biz.bridgeAlive())) return
+  const [list, tags] = await Promise.all([coachApi('dashboardList'), coachApi('dashboardTagsAll').catch(() => ({}))])
+  const pn = (raw) => { let d = String(raw || '').replace(/\D/g, ''); if (d.startsWith('972')) return d; if (d.startsWith('0')) d = d.slice(1); return /^5\d{8}$/.test(d) ? '972' + d : '' }
+  const rows = ((list && list.clients) || []).filter((c) => c.status === 'פעיל' && pn(c.phone) && !(tags[c.name] || []).some((t) => t === 'משפחה' || t === 'בדיקה'))
+  const sent = drafts.recentSent(200), ts = (x) => Date.parse(String(x).replace(' ', 'T')); let made = 0
+  for (const c of rows) {
+    if (made >= 5) break
+    const phone = pn(c.phone), mine = sent.filter((x) => x.name === c.name), jid = (mine.length && mine[mine.length - 1].chat_jid) || (await biz.chatForPhone(phone).catch(() => null))
+    if (!jid || drafts.pendingForPerson(jid, phone).length) continue
+    const lastMe = Math.max(...[await biz.lastFromMe(jid).catch(() => null), ...mine.map((x) => x.at)].filter(Boolean).map(ts), 0)
+    const inb = (await biz.inboundSince(jid, new Date(Math.max(lastMe, Date.now() - 7 * 864e5)).toISOString()).catch(() => [])).filter((r) => Q_RE.test(String(r.content || '')))
+    const q = inb.find((r) => Date.now() - ts(r.timestamp) > 20 * 3600e3); if (!q) continue
+    const first = String(c.name).split(' ')[0], when = new Date(ts(q.timestamp)), dmy = `${when.getDate()}.${when.getMonth() + 1}`
+    const ok = await alertWithDraft({
+      title: 'שאלה שלא נענתה', who: { chat_jid: jid, display: c.name, phone, content: String(q.content || '') },
+      headline: `שאלה שלא נענתה מאז ${dmy}`,
+      situation: `${first} שאל/ה את אביאל ב-${dmy} ולא קיבל/ה תשובה עד עכשיו: "${String(q.content || '').slice(0, 300)}". אביאל עונה עכשיו באיחור.`,
+      extraRules: 'לענות עניינית על השאלה עצמה. אם עבר יותר מיום — אפשר לפתוח ב"סליחה על האיחור" קצר. כאב/פציעה — להמליץ על פיזיותרפיסט או רופא ולא לאבחן. 1–3 שורות.',
+      hold: true,
+    }).catch((e) => { console.error('[unanswered]', c.name, e.message); return false })
+    if (ok) { made++; console.log('[unanswered]', c.name, dmy) }
+  }
+}
+cron.schedule('20 9 * * 0-5', unansweredQuestions, { timezone: 'Asia/Jerusalem' })
 
 // ── מעקב שלישי 11:00 (22.11.26, אביאל): מי שקיבל סיכום שבוע ולא ענה → הודעת המשך קצרה, כולם בהודעה אחת עם "כן לכולם" ──
 const WKSUM_PATH = path.join(ROOT, 'weekly-sum.json')
@@ -1420,7 +1459,10 @@ async function meetPrepPull() {
   try {
     const r = await fetch('https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec', { method: 'POST', body: JSON.stringify({ api: 'coach', k: 'c7dfe880cf024fc59fcc9a8a', fn: 'dashboardMeetPrep', args: [] }) })
     const j = await r.json(), q = (j && j.ok && Array.isArray(j.r)) ? j.r : []
-    for (const a of q) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(a.text || '').trim())).catch(() => {})
+    for (const a of q) { // 22.11.26 (אביאל: "בריף אוטומטי לפני פגישה"): הבריף המלא, ואם נכשל — ההכנה הקצרה מהשרת
+      const head = String(a.text || '').split('\n')[0]
+      let ok = false; if (a.name) { try { ok = await coachOps.briefFor(a.name, drafts.stripEmoji(head)) } catch (e) { console.error('[meet-brief]', e.message) } }
+      if (!ok) await client.sendMessage(config.owner, toWhatsApp(drafts.stripEmoji(a.text || '').trim())).catch(() => {}) }
   } catch (e) { console.error('meetPrepPull', e.message) }
 }
 cron.schedule('*/10 7-22 * * *', meetPrepPull, { timezone: 'Asia/Jerusalem' })
@@ -2270,6 +2312,7 @@ const CATCHUP = [
   ['checkin', 10 * 60, 15 * 60, [0], () => weeklyCheckin()],
   ['wkfollow', 11 * 60, 18 * 60, [2], () => weeklyFollowup()],
   ['renewboard', 10 * 60, 18 * 60, [1], () => renewalBoard(false)],
+  ['unanswered', 9 * 60 + 20, 14 * 60, [0, 1, 2, 3, 4, 5], () => unansweredQuestions()],
   ['reels', 10 * 60, 18 * 60, [0], () => weeklyScripts()],
   ['friday', 12 * 60 + 30, 17 * 60, [5], () => fridayReport()],
   ['weekrep', 8 * 60 + 5, 14 * 60, [0], () => weekClientsReport()],

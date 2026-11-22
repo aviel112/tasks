@@ -64,8 +64,8 @@ function planText(p) { if (!p) return 'אין גישה לאפליקציה'
   const meals = m ? (m.blocks || []).map((b) => b.title).filter((t) => t && !/סיכום|ירקות/.test(t)) : []
   return [m ? `תפריט: ${m.name} — ${meals.join(' · ')}` : 'תפריט: אין', g ? `תוכנית: ${g.name} — ${(g.blocks || []).filter((b) => /אימון/.test(b.title)).length} אימונים, ${ex} תרגילים` + ((g.blocks || [])[0] && (g.blocks[0].lines || [])[0] ? ` · ${(g.blocks[0].lines || [])[0]}` : '') : (p.noProg ? 'תוכנית: בלי תוכנית (מתאמן לבד)' : 'תוכנית: אין'), `מצב מעקב: ${p.mode || '—'}${p.macros && p.macros.k ? ' · יעד ' + p.macros.k + ' קק״ל' : ''}`, `אימונים רשומים באפליקציה: ${(p.lifts || []).length ? 'יש' : 'אין'}`].join('\n') }
 async function appSummary(c) { await D.say(`*${c.name} באפליקציה*\n` + planText(await plan(c).catch(() => null))) }
-async function brief(c) {
-  await D.say(`מכין בריף על ${c.name.split(' ')[0]}...`)
+async function brief(c, header) {
+  if (!header) await D.say(`מכין בריף על ${c.name.split(' ')[0]}...`)
   const pn = String(c.phone || '').replace(/\D/g, '').replace(/^0/, '972')
   // 22.11.26: השיחה יושבת לפעמים תחת מזהה lid ולא תחת הטלפון — עדיף הצ'אט שאליו באמת נשלחו הודעות, ואחריו זה שיש לו תיק
   const cands = [...new Set([(D.drafts.recentSent(200).filter((x) => x.name === c.name).pop() || {}).chat_jid, await D.biz.chatForPhone(pn).catch(() => null), pn + '@s.whatsapp.net'].filter(Boolean))]
@@ -81,8 +81,13 @@ async function brief(c) {
     '*הכי דחוף* (כסף/חידוש/סוף תהליך/בריאות — מה שדורש החלטה היום), *בריאות*, *נתונים* (משקל במספרים, אימונים, יומן, צעדים — ומה חסר), *מה מניע אותו/ה*, *פתוח מולו/ה* (מה הובטח ולא נסגר), *הצעה לסדר בפגישה* (3–5 נקודות ממוספרות). ' +
     'רק עובדות מהנתונים, עם תאריכים. אם יש סתירה בין מה שהמתאמן אומר לבין המספרים (למשל "לא זז" כשהמשקל ירד) — לציין. אם התוכנית באפליקציה ישנה יותר מאירוע בריאותי — לציין. חלק בלי מידע — לדלג.'
   let out = ''; try { out = String(await D.askBrainOnce(prompt, 'sonnet', { label: 'brief' })).trim() } catch (e) { return D.say('לא הצלחתי להכין בריף: ' + e.message) }
-  await D.say(D.drafts.stripEmoji(out))
+  await D.say((header ? header + '\n\n' : '') + D.drafts.stripEmoji(out))
 }
+// 22.11.26: בריף אוטומטי שעה לפני פגישה (במקום ההכנה הקצרה מהשרת)
+async function briefFor(name, header) { const c = ((await clients()) || []).find((x) => x.name === name); if (!c) return false; await brief(c, header); return true }
+// 22.11.26: מתי נכתבה התוכנית (מהשם "תוכנית אימון 30.10.26") — כדי לסמן תוכנית מלפני פציעה
+async function programInfo(name) { const c = ((await clients()) || []).find((x) => x.name === name); if (!c) return null; const p = await plan(c).catch(() => null); const g = p && p.program; if (!g) return null
+  const m = String(g.name || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/); return { name: g.name, date: m ? `${m[1]}.${m[2]}` : '', hasNote: /פציע|השתל|ניתוח|כאב|60%/.test(JSON.stringify(g.blocks && g.blocks[0] || '')) } }
 async function pay(c, amt) {
   const paid = Number(c.paid) || 0, bal = Number(c.balance) || 0
   await ask(`*תשלום · ${c.name}*: ${nis(amt)}\nשולם ${nis(paid)} → ${nis(paid + amt)} · יתרה ${nis(bal)} → ${nis(Math.max(0, bal - amt))}`, async () => { await coach('dashboardAddPayment', [c.name, amt]); CLIENTS.at = 0; return `נרשם: ${c.name.split(' ')[0]} שילם ${nis(amt)}.` })
@@ -149,4 +154,4 @@ async function handle(t) {
 }
 function init(d) { D = d }
 const _setClients = (l) => { CLIENTS = { at: Date.now(), list: l } } // לבדיקות
-module.exports = { init, isMine, handle, hasPending, pendingAt, RE, findName, _setClients }
+module.exports = { init, isMine, handle, hasPending, pendingAt, RE, findName, _setClients, briefFor, programInfo, clients }

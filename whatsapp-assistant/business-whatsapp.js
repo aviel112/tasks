@@ -242,4 +242,6 @@ async function genderOf(chatJid) {
   if (f + m < 3) return ''
   return f >= m * 2 ? 'f' : m >= f * 2 ? 'm' : ''
 }
-module.exports = { genderOf, knownName, phoneForChat, myRecentMessages, audioMessages, messageCount, cadence, recentImages, downloadMedia, selfChat, isSelf, newHotLeads, waitingForReply, recentMessages, lastMessage, repliesSince, nameOf, bridgeAlive, chatForPhone, inboundSince }
+// 22.11.26: מתי אביאל כתב לאחרונה בצ'אט (מה שהקליד בעצמו; מה שיצא דרך הגשר נבדק ב-sent-log)
+async function lastFromMe(chatJid) { const r = await sql(`SELECT timestamp FROM messages WHERE chat_jid = ?1 AND is_from_me = 1 ORDER BY datetime(timestamp) DESC LIMIT 1`, [chatJid]).catch(() => []); return r[0] ? r[0].timestamp : null }
+module.exports = { lastFromMe, genderOf, knownName, phoneForChat, myRecentMessages, audioMessages, messageCount, cadence, recentImages, downloadMedia, selfChat, isSelf, newHotLeads, waitingForReply, recentMessages, lastMessage, repliesSince, nameOf, bridgeAlive, chatForPhone, inboundSince }
