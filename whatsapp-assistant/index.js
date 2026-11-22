@@ -1511,12 +1511,17 @@ setInterval(() => coachCmd.names(), 36e5)
 const morningAgent = require('./morning-agent')
 // 22.11.26 (אביאל בחר בסקר): תזכורת תוספים, ציון דרך, בדיקה אחרי אימון — טיוטות בתור, רק עם נתונים אמיתיים
 const care = require('./care')
-care.init({ coachApi, planOf: async (t) => { const r = await fetch(APP_EXEC + '?api=plan&t=' + encodeURIComponent(t)); const j = await r.json(); return j && j.ok ? j.r : null },
+care.init({ coachApi, dataOf: async (t) => { const r = await fetch(APP_EXEC + '?api=data&t=' + encodeURIComponent(t)); const j = await r.json(); return j && j.ok ? j.r : null }, planOf: async (t) => { const r = await fetch(APP_EXEC + '?api=plan&t=' + encodeURIComponent(t)); const j = await r.json(); return j && j.ok ? j.r : null },
   alertWithDraft, drafts, biz, today: () => ilDay(Date.now()), log: (...a) => console.error(...a) })
 const careRun = (fn, tag) => async () => { if (!config.owner || !clientReady || !(await biz.bridgeAlive())) return; try { const n = await care[fn](); if (n) console.log('[care]', tag, n) } catch (e) { console.error('[care]', tag, e.message) } }
 cron.schedule('30 10 * * 0-5', careRun('suppRefill', 'supp'), { timezone: 'Asia/Jerusalem' })
 cron.schedule('40 10 * * 0-5', careRun('milestones', 'mile'), { timezone: 'Asia/Jerusalem' })
 cron.schedule('45 20 * * 0-5', careRun('afterWorkout', 'wk'), { timezone: 'Asia/Jerusalem' })
+// 22.11.26 (אביאל בחר בסקר): צעדים בערב, מתאמן חדש שלא נכנס, בדיקות דם (כל 4 ימים), תמונות שלא הועלו — טיוטות בתור הרגיל
+cron.schedule('0 20 * * 0-4', careRun('stepsPush', 'steps'), { timezone: 'Asia/Jerusalem' })
+cron.schedule('0 11 * * 0-5', careRun('notOpened', 'open'), { timezone: 'Asia/Jerusalem' })
+cron.schedule('15 11 * * 0-5', careRun('bloodNag', 'blood'), { timezone: 'Asia/Jerusalem' })
+cron.schedule('30 11 * * 0-5', careRun('photosNag', 'ph'), { timezone: 'Asia/Jerusalem' })
 const coordAgent = require('./coord-agent') // 6.11.26: אירוע / יום בלי מכון מהאפליקציה → 2 הצעות → "אשר שם 1"
 coordAgent.init({ coachApi: (fn, args) => coachApi(fn, args), askBrainOnce, stripEmoji: (x) => drafts.stripEmoji(x), ready: () => !!(config.owner && clientReady), send: (t) => client.sendMessage(updGid() || config.owner, toWhatsApp(drafts.stripEmoji(t).trim())).catch(() => {}) })
 cron.schedule('1-59/3 * * * *', () => coordAgent.scan().catch((e) => console.error('[coord]', e.message)), { timezone: 'Asia/Jerusalem' })

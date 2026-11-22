@@ -103,4 +103,84 @@ async function afterWorkout() {
   return made
 }
 
-module.exports = { init, suppRefill, milestones, afterWorkout, liftGains, todayWorkout, _days: days }
+// ===== 22.11.26 (אביאל בחר בסקר): ארבע "דחיפות" — צעדים בערב, מתאמן חדש שלא נכנס, בדיקות דם, תמונות שלא הועלו =====
+const talkedToday = async (c, who, today) => D.drafts.sentFor({ name: c.name, phone: who.phone, chat_jid: who.chat_jid }).some((x) => String(x.at).slice(0, 10) === today) ||
+  !!(await D.biz.inboundSince(who.chat_jid, today + 'T00:00:00+02:00').catch(() => [1])).length
+const weekKey = (d) => { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() - t.getUTCDay()); return t.toISOString().slice(0, 10) } // ראשון של השבוע
+
+// 1) צעדים בערב (20:00): רק מי שיש לו יעד, רשם היום צעדים (אחרת לא יודעים) ורחוק ממנו ב-25%+. עד פעמיים בשבוע
+async function stepsPush() {
+  const st = load(); st.steps = st.steps || {}; const today = D.today(), wk = weekKey(today); let made = 0
+  for (const c of await people()) {
+    const rec = st.steps[c.name] || {}; if (rec.last === today || (rec.wk === wk && rec.n >= 2)) continue
+    const card = await D.coachApi('dashboardClientCard', [c.name]).catch(() => null); if (!card || !card.token) continue
+    const d = await D.dataOf(card.token).catch(() => null); if (!d || (d.feat && d.feat.steps === false)) continue
+    const goal = +d.stepsGoal || 0, t = (d.week || []).find((x) => x.d === today), n = t && t.steps != null ? +t.steps : null
+    if (!goal || n == null || n >= goal * 0.75 || goal - n < 1500) continue
+    const who = await whoOf(c); if (busyWith(who) || await talkedToday(c, who, today)) continue
+    const left = goal - n, mins = Math.max(10, Math.round(left / 100 / 5) * 5)
+    const id = await D.alertWithDraft({ title: 'צעדים', who, headline: `${n.toLocaleString('he-IL')} מתוך ${goal.toLocaleString('he-IL')} צעדים היום`,
+      situation: `השעה 20:00. ${first(c.name)} עשה/תה היום ${n} צעדים, והיעד היומי שאביאל קבע הוא ${goal}. חסרים ${left} צעדים, בערך ${mins} דקות הליכה.`,
+      extraRules: 'הודעה קצרה מאוד (1–2 שורות) בקול של אביאל, דוחפת בלי לנזוף: כמה חסר והצעה אחת פשוטה (הליכה של X דקות עכשיו / אחרי האוכל). בלי הסברים על בריאות.', hold: true, noQuote: true }).catch((e) => { D.log('[care-steps]', c.name, e.message); return false })
+    if (id) { st.steps[c.name] = { last: today, wk, n: rec.wk === wk ? (rec.n || 0) + 1 : 1 }; made++; save(st) }
+  }
+  return made
+}
+
+// 2) מתאמן חדש שלא נכנס: 2–14 ימים מתחילת הליווי ואף פעם לא פתח את האפליקציה. פעמיים לכל היותר, 4 ימים ביניהן
+async function notOpened() {
+  const st = load(); st.open = st.open || {}; const today = D.today(); let made = 0
+  const list = (await D.coachApi('dashboardList')) || {}, seenOf = {}; (list.clients || []).forEach((x) => { seenOf[x.name] = x.seen || {} })
+  for (const c of await people()) {
+    const sn = seenOf[c.name] || {}; if (sn.d || sn.at || !c.start) continue
+    const age = days(c.start, today), rec = st.open[c.name] || { n: 0 }; if (age < 2 || age > 14 || rec.n >= 2 || (rec.last && days(rec.last, today) < 4)) continue
+    const card = await D.coachApi('dashboardClientCard', [c.name]).catch(() => null); if (!card || !card.token) continue
+    const who = await whoOf(c); if (busyWith(who)) continue
+    const link = await D.coachApi('dashboardAppLink', [c.name]).then((r) => r && r.link).catch(() => '')
+    const id = await D.alertWithDraft({ title: 'לא נכנס לאפליקציה', who, headline: `${age} ימים מתחילת הליווי ועוד לא פתח/ה את האפליקציה`,
+      situation: `${first(c.name)} התחיל/ה ליווי לפני ${age} ימים וקיבל/ה קישור לאפליקציה, אבל עוד לא פתח/ה אותה אף פעם.` + (link ? ` הקישור: ${link}` : ''),
+      extraRules: 'הודעה קצרה (2–3 שורות) בקול של אביאל, בלי האשמה: לשאול אם הקישור נפתח, להזכיר שכל התפריט והתוכנית מחכים שם, ולצרף את הקישור בדיוק כמו שהוא. לסיים בהצעה לעזור אם משהו לא עובד.', hold: true, noQuote: true }).catch((e) => { D.log('[care-open]', c.name, e.message); return false })
+    if (id) { st.open[c.name] = { n: rec.n + 1, last: today }; made++; save(st) }
+  }
+  return made
+}
+
+// 3) בדיקות דם בוואטסאפ: 7+ ימים מתחילת הליווי ועוד לא נשלחו. כל 4 ימים, עד 3 פעמים
+async function bloodNag() {
+  const st = load(); st.blood = st.blood || {}; const today = D.today(); let made = 0
+  for (const c of await people()) {
+    if (!c.start || days(c.start, today) < 7) continue
+    const rec = st.blood[c.name] || { n: 0 }; if (rec.n >= 3 || (rec.last && days(rec.last, today) < 4)) continue
+    const card = await D.coachApi('dashboardClientCard', [c.name]).catch(() => null); if (!card) continue
+    if (card.blood || card.bloodFile || (card.bloodFiles || []).length || card.bloodPending) continue
+    const eff = card.feat && card.feat.eff; if (eff && eff.vit === false) continue // בלי ויטמינים = בלי בדיקות דם (כמו באפליקציה)
+    const who = await whoOf(c); if (busyWith(who) || await talkedToday(c, who, today)) continue
+    const id = await D.alertWithDraft({ title: 'בדיקות דם', who, headline: `עוד לא שלח/ה בדיקות דם (${days(c.start, today)} ימים בליווי)${rec.n ? ' · תזכורת ' + (rec.n + 1) : ''}`,
+      situation: `${first(c.name)} בליווי ${days(c.start, today)} ימים ועוד לא שלח/ה בדיקות דם. שולחים מהאפליקציה, בכרטיס "בדיקות דם" במסך הבית (צילום או PDF), ומקבלים ניתוח: מה חסר, מה לבדוק אצל הרופא ואילו תוספים שווים.` + (rec.n ? ' כבר הזכרנו לפני כמה ימים.' : ''),
+      extraRules: 'הודעה קצרה (2–3 שורות) בקול של אביאל: למה זה חשוב לו (להתאים תוספים ותזונה), איפה שולחים באפליקציה, ושאם אין בדיקות עדכניות — לקבוע אצל רופא המשפחה. בלי לחץ.', hold: true, noQuote: true }).catch((e) => { D.log('[care-blood]', c.name, e.message); return false })
+    if (id) { st.blood[c.name] = { n: rec.n + 1, last: today }; made++; save(st) }
+  }
+  return made
+}
+
+// 4) תמונות שלא הועלו: האפליקציה מבקשת תמונות (photoDue) כבר 3 ימים ברצף. פעם אחת לכל בקשה
+async function photosNag() {
+  const st = load(); st.ph = st.ph || {}; const today = D.today(); let made = 0
+  for (const c of await people()) {
+    const card = await D.coachApi('dashboardClientCard', [c.name]).catch(() => null); if (!card || !card.token) continue
+    const d = await D.dataOf(card.token).catch(() => null); if (!d) continue
+    const rec = st.ph[c.name] || {}
+    if (!d.photoDue || (d.feat && d.feat.photos === false)) { if (rec.since) { delete st.ph[c.name]; save(st) } continue }
+    if (!rec.since) { st.ph[c.name] = { since: today }; save(st); continue }
+    if (rec.sent || days(rec.since, today) < 3) continue
+    const who = await whoOf(c); if (busyWith(who) || await talkedToday(c, who, today)) continue
+    const firstTime = !(card.ba || []).length
+    const id = await D.alertWithDraft({ title: 'תמונות', who, headline: `${firstTime ? 'תמונות התחלה' : 'תמונות החודש'} מחכות ${days(rec.since, today)} ימים`,
+      situation: `האפליקציה מבקשת מ${first(c.name)} ${firstTime ? 'תמונות התחלה' : 'את תמונות החודש'} כבר ${days(rec.since, today)} ימים, ועוד לא הועלו. 4 תמונות: חזית, שני הצדדים וגב, באותו מקום ובאותה תאורה. רק אביאל רואה אותן.`,
+      extraRules: 'הודעה קצרה (2–3 שורות) בקול של אביאל: למה התמונות חשובות (המשקל לא מראה הכל, התמונות כן), לבקש להצטלם היום, שתי דקות מול מראה. בלי לחץ ובלי מבוכה.', hold: true, noQuote: true }).catch((e) => { D.log('[care-ph]', c.name, e.message); return false })
+    if (id) { rec.sent = today; st.ph[c.name] = rec; made++; save(st) }
+  }
+  return made
+}
+
+module.exports = { init, suppRefill, milestones, afterWorkout, stepsPush, notOpened, bloodNag, photosNag, liftGains, todayWorkout, _days: days }
