@@ -24,6 +24,8 @@ const queueU = (did, t) => (ctx.queueDraft ? ctx.queueDraft(did, t, (ctx.updGid 
 // 22.11.26: תגית "בלי אפליקציה" בלוח (שון, אודליה) — בלי תזכורות אימון/צ׳ק-אין, ותמונה/שקילה נשלחות בווטסאפ
 let TAGS_C = { at: 0, v: {} }
 async function noApp(name) { if (Date.now() - TAGS_C.at > 30 * 60e3) { try { TAGS_C = { at: Date.now(), v: (await coachApi('dashboardTagsAll')) || {} } } catch (e) {} } return (TAGS_C.v[name] || []).includes('בלי אפליקציה') }
+// 22.11.26: הודעות הבוטים בלשון של המתאמן/ת (לפי הכרטיס, ואם אין — לפי איך שאביאל כותב לו/לה)
+async function femOf(phone, name) { try { const c = await coachApi('dashboardClientCard', [name]).catch(() => null); if (c && /אישה|נקבה/.test(c.gender || '')) return true; if (c && /גבר|זכר/.test(c.gender || '')) return false; try { const g = JSON.parse(fs.readFileSync(path.join(__dirname, 'brain', 'gender.json'), 'utf8'))[name]; if (g) return g === 'f' } catch (e) {} const jid = await ctx.biz.chatForPhone(phone).catch(() => null); return (await ctx.biz.genderOf(jid)) === 'f' } catch (e) { return false } }
 const hintU = (n) => `*כן ${n}* שולח · *לא ${n}* לא · או תשובה משלך`
 
 // ── מצב ──
@@ -335,7 +337,7 @@ async function renewalsTick() {
     const text = stage === 'd14' ? renewalText(c, weeks, res14)
       : stage === 'd7' ? `${n}, עוד שבוע התהליך נגמר. ממשיכים או עוצרים? שתי התשובות בסדר, רק שאדע כדי לשמור לך מקום.`
       : stage === 'd3' ? `${n}, עוד 3 ימים התהליך שלנו נגמר. ממשיכים? אם כן, אני מסדר שהחודש הבא יתחיל בלי הפסקה.`
-      : `${n}, היום התהליך שלנו נגמר רשמית. הגישה לאפליקציה נשארת לך עוד 7 ימים. אם תרצה לחזור, הכול שמור, רק תגיד.`
+      : (await femOf(c.phone, c.name)) ? `${n}, היום התהליך שלנו נגמר רשמית. הגישה לאפליקציה נשארת לך עוד 7 ימים. אם תרצי לחזור, הכול שמור, רק תגידי.` : `${n}, היום התהליך שלנו נגמר רשמית. הגישה לאפליקציה נשארת לך עוד 7 ימים. אם תרצה לחזור, הכול שמור, רק תגיד.`
     const did = await makeDraft(c.phone, c.name, text, { kind: 'renewal', name: c.name, stage })
     st.sent[stage] = new Date().toISOString(); changed = true
     await queueU(did, `*${n} ${c.daysLeft <= 0 ? 'מסיים היום' : 'מסיים בעוד ' + c.daysLeft + ' ימים'}* (#${did})\n${text}\n\n${hintU(n)}`)
@@ -355,7 +357,10 @@ async function proofTick() {
     const st = state.proof[c.name] || (state.proof[c.name] = {})
     if (st[mark] || st.optOut) continue
     const n = c.name.split(' ')[0]
-    const text = `${n}, ${mark / 7} שבועות. ${(await noApp(c.name)) ? 'תשלח לי תמונה כאן' : 'תעלה תמונה באפליקציה'}, אותה זווית כמו ההתחלה (מהצד, אור מהחלון, בוקר לפני אוכל), ותכתוב לי שתי שורות: מה הכי השתנה, ומה היה הכי קשה. זה הולך להיילייט רק אם תאשר, ובלי שם מלא.`
+    const fem = await femOf(c.phone, c.name), na = await noApp(c.name)
+    const text = fem
+      ? `${n}, ${mark / 7} שבועות. ${na ? 'תשלחי לי תמונה כאן' : 'תעלי תמונה באפליקציה'}, אותה זווית כמו בהתחלה (מהצד, אור מהחלון, בוקר לפני אוכל), ותכתבי לי שתי שורות: מה הכי השתנה, ומה היה הכי קשה. זה הולך להיילייט רק אם תאשרי, ובלי שם מלא.`
+      : `${n}, ${mark / 7} שבועות. ${na ? 'תשלח לי תמונה כאן' : 'תעלה תמונה באפליקציה'}, אותה זווית כמו ההתחלה (מהצד, אור מהחלון, בוקר לפני אוכל), ותכתוב לי שתי שורות: מה הכי השתנה, ומה היה הכי קשה. זה הולך להיילייט רק אם תאשר, ובלי שם מלא.`
     const did = await makeDraft(c.phone, c.name, text, { kind: 'proof', name: c.name, mark })
     st[mark] = new Date().toISOString(); changed = true
     await queueU(did, `*${n}: יום ${mark}, בקשת תמונה* (#${did})\n${text}\n\n${hintU(n)}`)
@@ -372,7 +377,9 @@ async function referralTick() {
     const day = Math.floor((Date.now() - c.start.getTime()) / DAY)
     if (day < 42 || day > 49 || state.referral[c.name]) continue
     const n = c.name.split(' ')[0]
-    const text = `${n}, 6 שבועות ביחד ואתה בקצב. יש לך חבר שמתלונן על הבטן? תשלח לי את המספר שלו. אם הוא מתחיל, הוא מקבל שבועיים נוספים חינם ואתה חודש ב-${PRICE_OLD / 2} במקום ${PRICE_OLD}. לא צריך לשכנע אותו, רק לתת לי את המספר.`
+    const text = (await femOf(c.phone, c.name))
+      ? `${n}, 6 שבועות ביחד ואת בקצב. יש לך חברה או חבר שמתלוננים על הבטן? תשלחי לי את המספר. אם הם מתחילים, הם מקבלים שבועיים נוספים חינם ואת חודש ב-${PRICE_OLD / 2} במקום ${PRICE_OLD}. לא צריך לשכנע, רק לתת לי את המספר.`
+      : `${n}, 6 שבועות ביחד ואתה בקצב. יש לך חבר שמתלונן על הבטן? תשלח לי את המספר שלו. אם הוא מתחיל, הוא מקבל שבועיים נוספים חינם ואתה חודש ב-${PRICE_OLD / 2} במקום ${PRICE_OLD}. לא צריך לשכנע אותו, רק לתת לי את המספר.`
     const did = await makeDraft(c.phone, c.name, text, { kind: 'referral', name: c.name })
     state.referral[c.name] = new Date().toISOString(); changed = true
     await queueU(did, `*${n}: שבוע 6, הפניית חבר* (#${did})\n${text}\n\n${hintU(n)}`)
