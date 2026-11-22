@@ -19,6 +19,8 @@ const sayTo = (to, t) => ctx.client.sendMessage(to, ctx.toWhatsApp(t)).then((sen
 const say = (t) => sayTo(ctx.config.owner, t)
 /* 5.11.26 (אביאל): מה שקשור למתאמנים (חידוש, תשלום, הוכחה, הפניה, שקילה) — לקבוצת "עדכוני מתאמנים", קצר. התשובות שם עובדות כמו בצ'אט */
 const sayU = (t) => sayTo((ctx.updGid && ctx.updGid()) || ctx.config.owner, t)
+// 22.11.26 (אביאל: "שאוכל להגיב אחד אחד"): כל טיוטה לאישור עוברת בתור המשותף — אחת בכל פעם
+const queueU = (did, t) => (ctx.queueDraft ? ctx.queueDraft(did, t, (ctx.updGid && ctx.updGid()) || ctx.config.owner) : sayU(t))
 const hintU = (n) => `*כן ${n}* שולח · *לא ${n}* לא · או תשובה משלך`
 
 // ── מצב ──
@@ -192,7 +194,7 @@ async function makeDraft(phone, name, text) {
 // 10.11.26 (אביאל: "לפני שאתה שולח בקשה לתשלום או תזכורת, תבדוק איתי"): טיוטה + בקשת אישור בקבוצת העדכונים, לא שליחה ישירה
 async function askApproval(phone, name, text, title) {
   const did = await makeDraft(phone, name, text); const n = String(name || '').split(' ')[0]
-  await sayU(`*${title}* (#${did})\n${text}\n\n${hintU(n)}`); return did
+  await queueU(did, `*${title}* (#${did})\n${text}\n\n${hintU(n)}`); return did
 }
 
 async function leadCloserTick() {
@@ -333,7 +335,7 @@ async function renewalsTick() {
       : `${n}, היום התהליך שלנו נגמר רשמית. הגישה לאפליקציה נשארת לך עוד 7 ימים. אם תרצה לחזור, הכול שמור, רק תגיד.`
     const did = await makeDraft(c.phone, c.name, text, { kind: 'renewal', name: c.name, stage })
     st.sent[stage] = new Date().toISOString(); changed = true
-    await sayU(`*${n} ${c.daysLeft <= 0 ? 'מסיים היום' : 'מסיים בעוד ' + c.daysLeft + ' ימים'}* (#${did})\n${text}\n\n${hintU(n)}`)
+    await queueU(did, `*${n} ${c.daysLeft <= 0 ? 'מסיים היום' : 'מסיים בעוד ' + c.daysLeft + ' ימים'}* (#${did})\n${text}\n\n${hintU(n)}`)
   }
   if (changed) saveState(state)
 }
@@ -353,7 +355,7 @@ async function proofTick() {
     const text = `${n}, ${mark / 7} שבועות. תעלה תמונה באפליקציה, אותה זווית כמו ההתחלה (מהצד, אור מהחלון, בוקר לפני אוכל), ותכתוב לי שתי שורות: מה הכי השתנה, ומה היה הכי קשה. זה הולך להיילייט רק אם תאשר, ובלי שם מלא.`
     const did = await makeDraft(c.phone, c.name, text, { kind: 'proof', name: c.name, mark })
     st[mark] = new Date().toISOString(); changed = true
-    await sayU(`*${n}: יום ${mark}, בקשת תמונה* (#${did})\n${text}\n\n${hintU(n)}`)
+    await queueU(did, `*${n}: יום ${mark}, בקשת תמונה* (#${did})\n${text}\n\n${hintU(n)}`)
   }
   if (changed) saveState(state)
 }
@@ -370,7 +372,7 @@ async function referralTick() {
     const text = `${n}, 6 שבועות ביחד ואתה בקצב. יש לך חבר שמתלונן על הבטן? תשלח לי את המספר שלו. אם הוא מתחיל, הוא מקבל שבועיים נוספים חינם ואתה חודש ב-${PRICE_OLD / 2} במקום ${PRICE_OLD}. לא צריך לשכנע אותו, רק לתת לי את המספר.`
     const did = await makeDraft(c.phone, c.name, text, { kind: 'referral', name: c.name })
     state.referral[c.name] = new Date().toISOString(); changed = true
-    await sayU(`*${n}: שבוע 6, הפניית חבר* (#${did})\n${text}\n\n${hintU(n)}`)
+    await queueU(did, `*${n}: שבוע 6, הפניית חבר* (#${did})\n${text}\n\n${hintU(n)}`)
   }
   if (changed) saveState(state)
 }
@@ -520,13 +522,9 @@ async function nudgeTick() {
     state.nudges[key] = new Date().toISOString(); changed = true
     batch.push({ did, first: String(t.name).split(' ')[0], rule: t.rule, text })
   }
-  /* 21.11.26 (אביאל: "יותר מדי הודעות"): כל התזכורות של הסבב בהודעה אחת, ואישור אחד לכולם */
-  const LBL = { weigh: 'לא נשקלו', checkin: 'בלי צ׳ק-אין', train: 'בלי אימונים' }
-  if (batch.length === 1) { const b = batch[0]; await sayU(`*${b.first}: ${b.rule === 'weigh' ? 'לא נשקל' : b.rule === 'checkin' ? 'בלי צ׳ק-אין' : 'בלי אימונים'}* (#${b.did})\n${b.text}\n\n${hintU(b.first)}`) }
-  else if (batch.length) { const L = [`*תזכורות למתאמנים* (${batch.length})`, '']
-    Object.keys(LBL).forEach((r) => { const g = batch.filter((b) => b.rule === r); if (!g.length) return; L.push(`*${LBL[r]}:* ${g.map((b) => b.first).join(', ')}`); L.push('> ' + NUDGE_TEXT[r]('(שם)', (g[0].text.match(/כבר (\d+) ימים/) || [])[1])); L.push('') })
-    L.push('*כן לכולם* שולח לכל אחד את ההודעה שלו · *לא לכולם* מבטל · או רק חלק: "כן ' + batch[0].first + ', כן ' + batch[1].first + '"')
-    state.nudgeBatch = { ids: batch.map((b) => b.did), at: new Date().toISOString() }; await sayU(L.join('\n')) }
+  /* 22.11.26 (אביאל: "תשלח הכל שאוכל להגיב אחד אחד"): כל תזכורת בנפרד, דרך התור — הבאה רק אחרי שטיפל בקודמת */
+  const LBL1 = { weigh: 'לא נשקל/ה', checkin: 'בלי צ׳ק-אין', train: 'בלי אימונים' }
+  for (const b of batch) await queueU(b.did, `*${b.first}: ${LBL1[b.rule]}* (#${b.did})\n${b.text}\n\n${hintU(b.first)}`)
   if (changed) saveState(state)
 }
 
@@ -558,7 +556,7 @@ async function weighJumpTick() {
     const n = String(c.name).split(' ')[0], text = JUMP_TEXT(n, kg, avg, d > 0)
     const did = await makeDraft(normPhone(c.phone), c.name, text)
     state.jumps[key] = new Date().toISOString(); changed = true
-    await sayU(`*${n}: קפיצה בשקילה ${d > 0 ? '+' : '−'}${Math.abs(d)} ק״ג* (#${did})\nהיום ${kg}, ממוצע השבוע ${avg}. באפליקציה ${n} כבר קיבל/ה הסבר.\n\n${text}\n\n${hintU(n)}`)
+    await queueU(did, `*${n}: קפיצה בשקילה ${d > 0 ? '+' : '−'}${Math.abs(d)} ק״ג* (#${did})\nהיום ${kg}, ממוצע השבוע ${avg}. באפליקציה ${n} כבר קיבל/ה הסבר.\n\n${text}\n\n${hintU(n)}`)
   }
   for (const k of Object.keys(state.jumps)) if (Date.now() - Date.parse(state.jumps[k]) > 14 * DAY) { delete state.jumps[k]; changed = true }
   if (changed) saveState(state)

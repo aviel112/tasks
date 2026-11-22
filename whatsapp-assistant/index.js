@@ -461,7 +461,7 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   const lines = parsed
     ? [head, quoteBlock, '', parsed.alt ? '*1.*' : '*התשובה שאשלח:*', parsed.draft, ...(parsed.alt ? ['', '*2.*', parsed.alt] : []), ...(parsed.alt2 ? ['', '*3.*', parsed.alt2] : []), '', drafts.approvalHint(id, heb || name, !!parsed.alt, !!parsed.alt2)]
     : [head, quoteBlock, '', drafts.stripEmoji(answer)]
-  if (hold && id) { draftQueuePush(id, lines.join('\n')); return true } // 22.11.26: בתור — יוצג אחרי שאביאל סיים עם הקודם
+  if (id) { draftQueuePush(id, lines.join('\n'), config.owner, !hold && !!String(who.content || '').trim()); return true } // 22.11.26: הכל בתור, אחת בכל פעם; לקוח שכתב — לפני טיוטות יזומות
   let sent; try { sent = await client.sendMessage(config.owner, toWhatsApp(lines.join('\n'))) } catch (e) { if (id) drafts.remove(id); throw e } // בלי התראה אין טיוטה (אחרת היא חוסמת את הלקוח 36 שעות)
   if (id && sent?.id?._serialized) drafts.setAlertMsgId(id, sent.id._serialized)
   if (id) offerDraft(id)
@@ -887,21 +887,26 @@ async function weeklyCheckin(opts = {}) {
 const DQ_PATH = path.join(ROOT, 'draft-queue.json')
 const dqLoad = () => { try { return JSON.parse(fs.readFileSync(DQ_PATH, 'utf8')) } catch { return { cur: null, items: [], total: 0, shown: 0 } } }
 const dqSave = (q) => fs.writeFileSync(DQ_PATH, JSON.stringify(q))
-function draftQueuePush(id, text) { const q = dqLoad(); if (!q.items.length && !q.cur) { q.total = 0; q.shown = 0 } q.items.push({ id, text }); q.total++; dqSave(q) }
+function draftQueuePush(id, text, to, front) { const q = dqLoad(); if (!q.items.length && !q.cur) { q.total = 0; q.shown = 0 }
+  const it = { id, text, to: to || config.owner }; if (front) { const k = q.items.findIndex((x) => !x.front); it.front = true; q.items.splice(k < 0 ? q.items.length : k, 0, it) } else q.items.push(it)
+  q.total++; dqSave(q); setTimeout(draftQueueTick, 500) }
+// "הבא" / "דלג": מעבירים את הנוכחית לסוף התור (היא נשארת פתוחה לאישור לפי שם או מספר)
+function draftQueueSkip() { const q = dqLoad(); if (!q.items.length) return false; if (q.cur && drafts.get(q.cur) && q.curText) q.items.push({ id: q.cur, text: q.curText, to: q.curTo, again: true }); q.cur = null; dqSave(q); draftQueueTick(); return true }
 let dqBusy = false
 async function draftQueueTick() {
   if (dqBusy || !config.owner || !clientReady) return
-  const q = dqLoad(); if (q.cur && drafts.get(q.cur)) return // אביאל עוד לא טיפל בנוכחית
+  const q = dqLoad(); if (q.cur && drafts.get(q.cur) && Date.now() - (q.curAt || 0) < 3 * 3600e3) return // אביאל עוד לא טיפל בנוכחית (אחרי 3 שעות ממשיכים, והיא נשארת פתוחה)
   if (!q.cur && !q.items.length) return
   dqBusy = true
   try {
     q.cur = null
     while (q.items.length) {
       const it = q.items.shift(); if (!drafts.get(it.id)) continue // בוטלה או נענתה בינתיים
-      q.shown++
-      const sent = await client.sendMessage(config.owner, toWhatsApp(it.text + `\n\n_(${q.shown} מתוך ${q.total}${q.items.length ? ', הבא אחרי שתטפל בזה' : ', האחרון'})_`))
+      if (!it.again) q.shown++
+      const left = q.items.filter((x) => drafts.get(x.id)).length
+      const sent = await client.sendMessage(it.to || config.owner, toWhatsApp(it.text + (left ? `\n\n_(עוד ${left} בתור · *הבא* = לדלג לבינתיים)_` : '')))
       if (sent?.id?._serialized) drafts.setAlertMsgId(it.id, sent.id._serialized)
-      offerDraft(it.id); q.cur = it.id; break
+      offerDraft(it.id); q.cur = it.id; q.curAt = Date.now(); q.curText = it.text; q.curTo = it.to; break
     }
     dqSave(q)
   } catch (e) { console.error('[dq]', e.message) } finally { dqBusy = false }
@@ -942,12 +947,9 @@ async function weeklyFollowup() {
   for (const q of quiet) {
     const t = drafts.stripEmoji(out[q.first] || ''); if (!t) continue
     const id = drafts.add({ chat_jid: q.jid, phone: q.phone, name: q.name, alias: q.first, text: t })
-    ids.push(id); L.push(`*${q.first}* (#${id})\n${t}`)
+    ids.push(id); draftQueuePush(id, `*${q.first}: לא ענה/תה לסיכום השבוע* (#${id})\n${t}\n\n${drafts.approvalHint(id, q.first, false, false)}`)
   }
   if (!ids.length) return
-  FOLLOW_BATCH = { ids, at: new Date().toISOString() }
-  await client.sendMessage(config.owner, toWhatsApp(`*לא ענו לסיכום השבוע* (${ids.length})\n\n` + L.join('\n\n') +
-    `\n\n*כן לכולם* שולח לכל אחד את שלו · *לא לכולם* מבטל · או רק חלק: "כן ${quiet[0].first}"`)).catch(() => {})
   console.log('[wkfollow]', ids.length)
 }
 cron.schedule('0 11 * * 2', weeklyFollowup, { timezone: 'Asia/Jerusalem' })
@@ -1651,6 +1653,7 @@ function onIncoming(msg) {
 
     // "כן שון" רק אם באמת יש תשובה ממתינה לשון; אחרת זו שיחה רגילה עם העוזרת ("כן אני מגיע מחר")
     // כמה אישורים בהודעה אחת: "כן רון, כן שון, לא יובל" — כל אחד נבדק ונשלח בנפרד
+    if (/^(הבא|דלג)$/.test(String(text || '').trim()) && draftQueueSkip()) return
     { const all = String(text || '').trim().match(/^(כן|שלח|שלחי|לא|בטל|בטלי) לכולם$/), ids = all ? (() => { const a = advisor.nudgeBatchInfo(), b = followBatchInfo(); const use = b && (!a || Date.parse(b.at) > Date.parse(a.at)) ? b.ids : advisor.nudgeBatchIds(); return use.filter((i) => drafts.get(i)) })() : [] // 21.11.26: תזכורות המתאמנים מגיעות בהודעה אחת
       if (all && ids.length) { const yes = /^(כן|שלח|שלחי)$/.test(all[1]), acc = []
         if (!yes) { ids.forEach((i) => drafts.remove(i)); client.sendMessage(config.owner, toWhatsApp('בוטל. ' + ids.length + ' הודעות לא נשלחו.')).catch(() => {}); return }
@@ -2066,7 +2069,7 @@ ROUTINES.reels = weeklyScripts
 cron.schedule(config.reelsCron, weeklyScripts, { timezone: 'Asia/Jerusalem' })
 scheduleRoutine(config.monthlyCron, MONTHLY_PROMPT, 'monthly', false) // 1 לחודש בבוקר
 
-try { advisor.install({ client, config, toWhatsApp, drafts, biz, profiles, askBrainOnce, isReady: () => clientReady, offerDraft: (id) => offerDraft(id), updGid }) } catch (e) { console.error('[advisor-install]', e.message) }
+try { advisor.install({ client, config, toWhatsApp, drafts, biz, profiles, askBrainOnce, isReady: () => clientReady, offerDraft: (id) => offerDraft(id), updGid, queueDraft: (id, t, to) => draftQueuePush(id, t, to) }) } catch (e) { console.error('[advisor-install]', e.message) }
 // 11.11.26 פרוטוקול הקיץ: פרק פתיחה מיד + שיעור כל בוקר לקונים. הגדרות ב-protocol-config.json (dryRun=true עד שאביאל מפעיל)
 const protocol = require('./protocol')
 const stocks = require('./stocks')
@@ -2109,6 +2112,16 @@ async function catchUp() {
 }
 setInterval(catchUp, 5 * 60 * 1000)
 client.on('ready', () => setTimeout(catchUp, 90 * 1000))
+// 22.11.26 (אביאל: "תשלח הכל שאוכל להגיב אחד אחד"): requeue-all.json → כל הטיוטות הפתוחות מוצגות מחדש אחת אחת, קודם מי שכתב
+client.on('ready', () => setTimeout(() => { const f = path.join(ROOT, 'requeue-all.json'); if (!fs.existsSync(f)) return; fs.rmSync(f, { force: true })
+  const ids = drafts.pendingIds().sort((a, b) => a - b), q = dqLoad(); q.items = q.items.filter((x) => !ids.includes(x.id)); q.cur = null; dqSave(q)
+  const L = ids.map((i) => [i, drafts.get(i)]).filter(([, it]) => it)
+  for (const [i, it] of L.filter(([, x]) => x.clientText).concat(L.filter(([, x]) => !x.clientText))) {
+    const n = it.alias || String(it.name).split(' ')[0], said = it.clientText ? it.clientText.split('\n').map((l) => '> ' + l).join('\n') + '\n\n' : ''
+    const body = it.alt ? `*1.*\n${it.text}\n\n*2.*\n${it.alt}` + (it.alt2 ? `\n\n*3.*\n${it.alt2}` : '') : it.text
+    draftQueuePush(i, `*${it.name}*${it.clientText ? ' כתב/ה:' : ''} (#${i})\n${said}${body}\n\n${drafts.approvalHint(i, n, !!it.alt, !!it.alt2)}`)
+  }
+  console.log('[dq] requeued', L.length) }, 120 * 1000))
 // השלמה חד-פעמית (22.11.26): weekly-redo.json עם {names} → סיכום שבוע רק להם, ואז הקובץ נמחק
 client.on('ready', () => setTimeout(() => { const f = path.join(ROOT, 'weekly-redo.json'); let j = null; try { j = JSON.parse(fs.readFileSync(f, 'utf8')) } catch { return } fs.rmSync(f, { force: true }); if (j && j.names && j.names.length) weeklyCheckin({ only: j.names }).catch((e) => console.error('[redo]', e.message)) }, 150 * 1000))
 client.on('ready', () => setTimeout(async () => { if (!config.owner) return; try { const made = await routes.ensure(client, config.owner); console.log('[routes] ensure', JSON.stringify(made), JSON.stringify(routes.load()))
