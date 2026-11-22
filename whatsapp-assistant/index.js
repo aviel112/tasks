@@ -658,6 +658,7 @@ async function promisesBlock() {
 let lastOfferedDraftId = null
 let prevOfferedDraftId = null, lastOfferedAt = 0 // ההצעה הקודמת ומתי הגיעה החדשה — "כן" שנכתב לפני שההתראה החדשה הגיעה שייך לקודמת
 let AMBIG = null // 22.11.26: "יש כמה" שמחכה למספר
+const EDIT_MSGS = new Set() // הודעות "ערוך": ציטוט עליהן = טקסט לשליחה, אף פעם לא הוראת תיקון
 function offerDraft(id) { if (id !== lastOfferedDraftId) prevOfferedDraftId = lastOfferedDraftId; lastOfferedDraftId = id; lastOfferedAt = Date.now() }
 const PREFS_PATH = path.join(ROOT, 'brain', 'prefs.md')
 const prefsText = () => { try { return fs.readFileSync(PREFS_PATH, 'utf8').trim() } catch { return '' } }
@@ -1795,9 +1796,11 @@ function onIncoming(msg) {
         const qid = quoted && drafts.findByAlert(quoted.id?._serialized)
         if (qid && draftCmd) { // פקודה עם תוספת שלא זוהתה — לא טקסט ללקוח
           if (draftCmd.type === 'cancel') return handleDraftCommand(msg, { type: 'cancel', ref: String(qid) })
+          if (draftCmd.type === 'edit') return handleDraftCommand(msg, { ...draftCmd, ref: String(qid) }) // "ערוך 2" בציטוט על ההתראה
           if (draftCmd.type === 'send' && draftCmd.ref && !/^\d+$/.test(draftCmd.ref)) return reviseDraft(qid, text)
           return client.sendMessage(config.owner, toWhatsApp('לא בטוח למה התכוונת, אז לא שלחתי כלום. "כן ' + qid + '" לשליחה, "לא ' + qid + '" לביטול, או תכתוב מה לשנות.')).catch(console.error)
         }
+        if (qid && EDIT_MSGS.has(quoted.id?._serialized)) return handleDraftCommand(msg, { type: 'send', ref: String(qid), force: false, override: text.replace(/\u200b/g, '') })
         if (qid && INSTRUCTION_RE.test(text)) return reviseDraft(qid, text)
         if (qid) return handleDraftCommand(msg, { type: 'send', ref: String(qid), force: false, override: text })
         return handle(msg, text)
@@ -2010,6 +2013,14 @@ async function handleDraftCommand(msg, cmd) {
   if (cmd.type === 'cancel') {
     drafts.remove(id); bump('cancelled')
     return say(`בוטל. לא שלחתי כלום ל${it.name}.`)
+  }
+  if (cmd.type === 'edit') { // 22.11.26: הנוסח לבד, בלי סימון בוט, כדי להעתיק/לערוך ולהשיב בציטוט
+    const opt = cmd.option || 1, body = drafts.stripEmoji([it.text, it.alt, it.alt2][opt - 1] || it.text)
+    const dest = (msg && msg._routeGid) || routes.gidFor('coach') || config.owner
+    const plain = await client.sendMessage(dest, body).catch(() => null)
+    if (plain?.id?._serialized) { drafts.setAlertMsgId(id, plain.id._serialized); EDIT_MSGS.add(plain.id._serialized) }
+    offerDraft(id)
+    return say(`למעלה נוסח ${opt} ל${it.name} לבד. לחיצה ארוכה ← העתקה, משנים, ושולחים כתשובה (ציטוט) על ההודעה הזו — יישלח ל${it.alias || String(it.name).split(' ')[0]} בדיוק כמו שכתבת.`)
   }
   if (cmd.type === 'script') {
     // הודעה קולית אמיתית ממנו ממירה יותר מכל טקסט — נותנים לו תסריט לדיבור, לא לקריאה

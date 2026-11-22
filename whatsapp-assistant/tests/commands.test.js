@@ -25,6 +25,12 @@ eq('כן', P('כן'), { type: 'send', ref: null, option: 1 })
 eq('1', P('1'), { type: 'send', ref: null, option: 1 })
 eq('2', P('2'), { type: 'send', ref: null, option: 2 })
 eq('לא אודליה', P('לא אודליה'), { type: 'cancel', ref: 'אודליה', option: undefined })
+// עריכה
+eq('ערוך', P('ערוך'), { type: 'edit', ref: null, option: 1 })
+eq('ערוך 2', P('ערוך 2'), { type: 'edit', ref: null, option: 2 })
+eq('ערוך 2 שני', P('ערוך 2 שני'), { type: 'edit', ref: 'שני', option: 2 })
+eq('ערוך שני 3', P('ערוך שני 3'), { type: 'edit', ref: 'שני', option: 3 })
+eq('ערוך 584', P('ערוך 584'), { type: 'edit', ref: '584', option: 1 })
 // מספר טיוטה
 eq('584', P('584'), { type: 'pick', ref: '584', option: undefined })
 eq('584 אודליה', P('584 אודליה'), { type: 'send', ref: '584', option: 1 })
