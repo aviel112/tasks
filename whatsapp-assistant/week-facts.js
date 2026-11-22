@@ -1,7 +1,10 @@
 // 22.11.26 (אביאל: "סיכום שבוע אישי" לכל מתאמן, ראשון 10:00, אחת אחת עם 3 אופציות):
 // עובדות השבוע מהשרת (dashboardWeekFacts) → שורת נתונים לטיוטה + כללי הניסוח.
-function factsLine(f) {
+// 22.11.26 (אביאל: "שון לא באפליקציה, וגם אודליה"): תגית "בלי אפליקציה" בלוח — רק שקילות, בלי אימונים/יומן/כניסות
+const NOAPP_TAG = 'בלי אפליקציה'
+function factsLine(f, noApp) {
   if (!f) return ''
+  if (noApp) return [f.goal && 'מטרה: ' + f.goal, f.weighs ? `${f.weighs} שקילות, ממוצע ${f.avg} ק״ג` + (f.diff == null ? '' : f.diff === 0 ? ' (כמו בשבוע הקודם)' : ` (${f.diff > 0 ? '+' : '−'}${Math.abs(f.diff)} ק״ג מול ממוצע השבוע הקודם)`) : 'שקילות: לא נרשמו'].filter(Boolean).join(' · ')
   const L = []
   if (f.goal) L.push('מטרה: ' + f.goal)
   if (f.weighs) L.push(`${f.weighs} שקילות, ממוצע ${f.avg} ק״ג` + (f.diff == null ? '' : f.diff === 0 ? ' (כמו בשבוע הקודם)' : ` (${f.diff > 0 ? '+' : '−'}${Math.abs(f.diff)} ק״ג מול ממוצע השבוע הקודם)`))
@@ -12,8 +15,10 @@ function factsLine(f) {
   if (f.food >= 4) L.push(`יומן אוכל מולא ב-${f.food} ימים`) // רק לטובה: חלק אוכלים לפי תפריט ולא ממלאים יומן
   return L.join(' · ')
 }
-const hasData = (f) => !!(f && (f.weighs || f.trains || f.food >= 4))
-const situation = (first, f) => hasData(f)
+const hasData = (f, noApp) => !!(f && (noApp ? f.weighs : (f.weighs || f.trains || f.food >= 4)))
+const situation = (first, f, noApp) => noApp
+  ? `יום ראשון בבוקר. אביאל שולח ל${first} סיכום אישי של השבוע שעבר. ${first} לא משתמש/ת באפליקציה (אל תזכיר/י אפליקציה, אימונים רשומים, יומן או צעדים). ` + (f && f.weighs ? `השקילות שהגיעו אליו: ${factsLine(f, true)}.` : 'לא הגיעו שקילות השבוע.') + ' לשאול איך היו האימונים והאוכל במקום להסיק מהנתונים.'
+  : hasData(f)
   ? `יום ראשון בבוקר. אביאל שולח ל${first} סיכום אישי של השבוע שעבר (ראשון עד שבת). הנתונים מהאפליקציה: ${factsLine(f)}.`
   : `יום ראשון בבוקר. אביאל שולח לכל מתאמן סיכום אישי של השבוע שעבר. אצל ${first} אין נתונים מהשבוע באפליקציה (בלי שקילות ובלי אימונים רשומים).`
 const RULES = 'סיכום שבוע אישי בקול של אביאל. לפתוח בדבר אחד ספציפי וטוב מהנתונים (מספר אמיתי אחד או שניים, לא רשימה של כל הנתונים), אחריו מיקוד אחד לשבוע החדש שנגזר מהנתון החלש, ולסיים בשאלה אחת קלה. 2–4 שורות. ' +
@@ -32,7 +37,8 @@ function proofLine(first, f) {
 }
 // 22.11.26 (אביאל: "דוח מי משתמש במה"): שורה לכל מתאמן על 7 הימים האחרונים + סיכום. rows: [{ first, f, seen }]
 function usageReport(rows) {
-  const R = rows.filter((r) => r.f); if (!R.length) return ''
+  const off = rows.filter((r) => r.noApp).map((r) => r.first)
+  const R = rows.filter((r) => r.f && !r.noApp); if (!R.length) return ''
   const dm = (d) => { const m = String(d || '').match(/^\d{4}-(\d\d)-(\d\d)/); return m ? `${Number(m[2])}.${Number(m[1])}` : '' }
   const score = (f) => (f.weighs || 0) + (f.trains || 0) * 2 + (f.food || 0)
   const n = R.length, cnt = (fn) => R.filter((r) => fn(r.f)).length
@@ -44,6 +50,7 @@ function usageReport(rows) {
   })
   const none = R.filter((r) => !score(r.f)).map((r) => r.first)
   if (none.length) L.push('', `בלי שום רישום השבוע: ${none.join(', ')}`)
+  if (off.length) L.push(`לא באפליקציה (לא נספרים): ${off.join(', ')}`)
   return L.join('\n')
 }
-module.exports = { factsLine, hasData, situation, RULES, proofLine, usageReport }
+module.exports = { NOAPP_TAG, factsLine, hasData, situation, RULES, proofLine, usageReport }

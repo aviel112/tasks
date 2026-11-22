@@ -21,6 +21,9 @@ const say = (t) => sayTo(ctx.config.owner, t)
 const sayU = (t) => sayTo((ctx.updGid && ctx.updGid()) || ctx.config.owner, t)
 // 22.11.26 (אביאל: "שאוכל להגיב אחד אחד"): כל טיוטה לאישור עוברת בתור המשותף — אחת בכל פעם
 const queueU = (did, t) => (ctx.queueDraft ? ctx.queueDraft(did, t, (ctx.updGid && ctx.updGid()) || ctx.config.owner) : sayU(t))
+// 22.11.26: תגית "בלי אפליקציה" בלוח (שון, אודליה) — בלי תזכורות אימון/צ׳ק-אין, ותמונה/שקילה נשלחות בווטסאפ
+let TAGS_C = { at: 0, v: {} }
+async function noApp(name) { if (Date.now() - TAGS_C.at > 30 * 60e3) { try { TAGS_C = { at: Date.now(), v: (await coachApi('dashboardTagsAll')) || {} } } catch (e) {} } return (TAGS_C.v[name] || []).includes('בלי אפליקציה') }
 const hintU = (n) => `*כן ${n}* שולח · *לא ${n}* לא · או תשובה משלך`
 
 // ── מצב ──
@@ -352,7 +355,7 @@ async function proofTick() {
     const st = state.proof[c.name] || (state.proof[c.name] = {})
     if (st[mark] || st.optOut) continue
     const n = c.name.split(' ')[0]
-    const text = `${n}, ${mark / 7} שבועות. תעלה תמונה באפליקציה, אותה זווית כמו ההתחלה (מהצד, אור מהחלון, בוקר לפני אוכל), ותכתוב לי שתי שורות: מה הכי השתנה, ומה היה הכי קשה. זה הולך להיילייט רק אם תאשר, ובלי שם מלא.`
+    const text = `${n}, ${mark / 7} שבועות. ${(await noApp(c.name)) ? 'תשלח לי תמונה כאן' : 'תעלה תמונה באפליקציה'}, אותה זווית כמו ההתחלה (מהצד, אור מהחלון, בוקר לפני אוכל), ותכתוב לי שתי שורות: מה הכי השתנה, ומה היה הכי קשה. זה הולך להיילייט רק אם תאשר, ובלי שם מלא.`
     const did = await makeDraft(c.phone, c.name, text, { kind: 'proof', name: c.name, mark })
     st[mark] = new Date().toISOString(); changed = true
     await queueU(did, `*${n}: יום ${mark}, בקשת תמונה* (#${did})\n${text}\n\n${hintU(n)}`)
@@ -516,8 +519,9 @@ async function nudgeTick() {
     const last = state.nudges[key]
     if (last && Date.now() - Date.parse(last) < 3 * DAY) continue // אחת ל-3 ימים לכל מתאמן ולכל סוג
     if (Object.values(state.nudges).some((iso) => iso.startsWith(today()) ) && Object.entries(state.nudges).some(([k, iso]) => k.startsWith(t.name + ':') && iso.startsWith(today()))) continue // אחת ביום למתאמן
+    const na = await noApp(t.name); if (na && t.rule !== 'weigh') continue
     const days = (t.detail.match(/(\d+) ימים/) || [])[1]
-    const text = NUDGE_TEXT[t.rule](t.name.split(' ')[0], days)
+    let text = NUDGE_TEXT[t.rule](t.name.split(' ')[0], days); if (na) text = text.replace('ורישום באפליקציה', 'ולשלוח לי את המספר')
     const did = await makeDraft(t.phone, t.name, text)
     state.nudges[key] = new Date().toISOString(); changed = true
     batch.push({ did, first: String(t.name).split(' ')[0], rule: t.rule, text })

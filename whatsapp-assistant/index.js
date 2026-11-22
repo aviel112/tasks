@@ -859,15 +859,15 @@ async function weeklyCheckin(opts = {}) {
     const phone = pn(c.phone), first = String(c.name).split(' ')[0]
     try {
       const jid = (await biz.chatForPhone(phone).catch(() => null)) || `${phone}@s.whatsapp.net`
-      const f = await coachApi('dashboardWeekFacts', [c.name]).catch(() => null)
-      usage.push({ first, f, seen: c.seen && c.seen.d })
-      const pr = weekFacts.proofLine(first, f); if (pr) proof.push(pr) // 22.11.26 (אביאל): סימון לסטורי הוכחה
+      const f = await coachApi('dashboardWeekFacts', [c.name]).catch(() => null), noApp = (tags[c.name] || []).includes(weekFacts.NOAPP_TAG)
+      usage.push({ first, f, seen: c.seen && c.seen.d, noApp })
+      const pr = noApp ? '' : weekFacts.proofLine(first, f); if (pr) proof.push(pr) // 22.11.26 (אביאל): סימון לסטורי הוכחה
       if (drafts.pendingForChat(jid, phone, true)) { skipped.push(first + ' (מחכה תשובה שלך להודעה שלו)'); continue } // 22.11.26: רק תשובה שלא ענית חוסמת, לא תזכורת של בוט
       const ok = await alertWithDraft({
         title: 'סיכום שבוע',
         who: { chat_jid: jid, display: c.name, phone, content: '' },
-        headline: 'סיכום שבוע' + (weekFacts.hasData(f) ? '\n' + weekFacts.factsLine(f) : '\nאין נתונים מהשבוע באפליקציה'),
-        situation: weekFacts.situation(first, f),
+        headline: 'סיכום שבוע' + (noApp ? ' (בלי אפליקציה)' : '') + (weekFacts.hasData(f, noApp) ? '\n' + weekFacts.factsLine(f, noApp) : noApp ? '\nלא הגיעו שקילות השבוע' : '\nאין נתונים מהשבוע באפליקציה'),
+        situation: weekFacts.situation(first, f, noApp),
         extraRules: weekFacts.RULES,
         hold: true,
       })
@@ -1060,7 +1060,7 @@ async function coachApi(fn, args) { const r = await fetch('https://script.google
 async function weeklyAppIdeas() {
   if (!config.owner || !clientReady) return; markRan('appideas')
   try {
-    const R = (await coachApi('dashboardAppRollout').catch(() => [])) || [], E = ((await coachApi('dashboardAppErrors').catch(() => [])) || []).filter((x) => Date.now() - Date.parse(x.at) < 7 * 864e5)
+    const TG = (await coachApi('dashboardTagsAll').catch(() => ({}))) || {}, R = ((await coachApi('dashboardAppRollout').catch(() => [])) || []).filter((x) => !(TG[x.name] || []).includes('בלי אפליקציה')) // 22.11.26: מי שלא באפליקציה לא נספר, E = ((await coachApi('dashboardAppErrors').catch(() => [])) || []).filter((x) => Date.now() - Date.parse(x.at) < 7 * 864e5)
     const first = (n) => String(n).split(' ')[0], inW = R.filter((x) => x.days != null && x.days <= 7), never = R.filter((x) => !x.seen), quiet = R.filter((x) => x.days != null && x.days > 7), noPush = R.filter((x) => x.seen && !x.push)
     const status = '*האפליקציה השבוע*' /* 22.11.26: מי נכנס ומתי — עבר לדוח "מי משתמש במה" בסוף סבב הסיכומים */ + (noPush.length ? '\nבלי התראות: ' + noPush.map((x) => first(x.name)).join(', ') : '') + '\nתקלות: ' + (E.length ? E.length : 'אין')
     const ideas = await askBrainOnce('אתה היועץ של אביאל, מאמן כושר ותזונה בליווי אישי, ושל אפליקציית המתאמנים שלו (שקילה, יומן אוכל עם ברקוד/הקלטה/רשימה, תפריט, תוכנית אימון בתרגיל אחד במסך, פעילות נוספת לצעדים, "מותר לי?" שמחשב החלפה מהתפריט, סרטוני טכניקה עם ניתוח, סיכום ערב, תזכורות אוטומטיות למי שלא נשקל או לא רשם). זה מצב השבוע:\n' + status + '\n\nכתוב בדיוק 3 רעיונות לשבוע הקרוב (שיפור באפליקציה, אוטומציה, או למי לפנות). כל רעיון עד 10 מילים, ממוספר. עברית פשוטה, בלי אימוג׳י, בלי מקפים ארוכים, בלי הקדמה.', 'sonnet', { label: 'app-ideas' }).catch(() => '')
