@@ -1105,6 +1105,7 @@ cron.schedule('20 9 * * 0-5', unansweredQuestions, { timezone: 'Asia/Jerusalem' 
 
 // 22.11.26: הודעות מקלוד קוד (הצעות לשיפור, דוח בנייה) — קובץ טקסט בתיקיית say-inbox נשלח לאביאל ונמחק
 setInterval(() => { if (!config.owner || !clientReady) return; try { const dir = path.join(ROOT, 'say-inbox'); if (!fs.existsSync(dir)) return
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.photo'))) { const fp = path.join(dir, f), n = fs.readFileSync(fp, 'utf8').trim(); fs.rmSync(fp); if (n) CHAT_ALS.run({ say: true }, () => sendPhotoRecs(n)).catch((e) => console.error('[photo-recs]', e.message)) }
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.txt')).sort()) { const fp = path.join(dir, f), t = fs.readFileSync(fp, 'utf8').trim(); fs.rmSync(fp); if (t) CHAT_ALS.run({ say: true }, () => client.sendMessage(config.owner, toWhatsApp(t))).catch(() => {}) } } catch (e) { console.error('[say-inbox]', e.message) } }, 60 * 1000)
 
 // ── מעקב שלישי 11:00 (22.11.26, אביאל): מי שקיבל סיכום שבוע ולא ענה → הודעת המשך קצרה, כולם בהודעה אחת עם "כן לכולם" ──
@@ -1227,13 +1228,44 @@ async function updGroupAdopt(msg, cid) {
   if (nm.trim() !== 'עדכוני מתאמנים' && String(msg.body || '').trim() !== 'עדכונים') return false
   fs.writeFileSync(UPD_PATH, JSON.stringify({ gid: cid, at: new Date().toISOString() }))
   client.sendMessage(cid, 'מחובר. מעכשיו ניתוח בדיקות דם ותמונות של מתאמנים יגיע לכאן').catch(() => {}); console.log('[upd] adopted', cid); return true }
+// 23.11.26 (אביאל: "ההודעה נשלחה חלקית — תמציתית ועם אופציה לאשר מה שאני רוצה"): ניתוח תמונות → הודעה קצרה,
+// כל המלצה בשורה אחת עם מספר. אביאל עונה במספרים ("1 3") → המוח המלא מעדכן את התוכנית מהמסמך העדכני ומדווח.
+let PHOTO_REC = null // { name, recs:[], at, msgId }
+async function sendPhotoRecs(name) {
+  const card = await coachApi('dashboardClientCard', [name]).catch(() => null), w = card && card.weak
+  if (!w || !(w.recs || []).length) return false
+  const first = String(name).split(' ')[0]
+  let short = null
+  try { const raw = String(await askBrainOnce('קצר כל המלצה לשורה אחת בעברית פשוטה (עד 10 מילים), בלי הסברים, בלי אנגלית. החזר JSON בלבד: {"sum":"משפט אחד על המצב (עד 12 מילים)","recs":["..."]}\nמצב: ' + (w.summary || '') + '\nהמלצות:\n' + w.recs.map((r, i) => (i + 1) + '. ' + r).join('\n'), 'haiku', { label: 'photo-recs' }))
+    short = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)) } catch (e) { console.error('[photo-recs]', e.message) }
+  const recs = (short && Array.isArray(short.recs) && short.recs.length === w.recs.length) ? short.recs : w.recs.map((r) => r.split(/[,.]/)[0])
+  const weak = (w.weak || []).map((x) => x.mu).filter(Boolean).join(', ')
+  const text = `*תמונות חדשות · ${name}*\n${(short && short.sum) || String(w.summary || '').split('.')[0]}` + (weak ? `\nחולשות: ${weak}` : '') +
+    `\n\n*מה לשנות בתוכנית:*\n` + recs.map((r, i) => `*${i + 1}* · ${r}`).join('\n') + `\n\nתענה במספרים שאתה רוצה (למשל 1 3) ואני מעדכן ל${first} את התוכנית. אפשר גם לכתוב לי מה לשנות.`
+  const m = await client.sendMessage(config.owner, toWhatsApp(text)).catch(() => null)
+  PHOTO_REC = { name, recs: w.recs, short: recs, at: Date.now(), msgId: m && m.id && m.id._serialized }
+  return true
+}
+async function applyPhotoRecs(msg, picks) {
+  const p = PHOTO_REC; PHOTO_REC = null
+  const chosen = picks.map((i) => p.recs[i - 1]).filter(Boolean)
+  await msg.reply(toWhatsApp(`על זה. מעדכן ל${p.name.split(' ')[0]} את התוכנית לפי ${picks.join(', ')}.`)).catch(() => {})
+  try {
+    const ans = await askBrainFull(`אביאל אישר מניתוח התמונות של ${p.name} את ההמלצות האלה לתוכנית האימון:\n` + chosen.map((r, i) => `${picks[i]}. ${r}`).join('\n') +
+      `\nתעדכן את התוכנית הנוכחית שלו לפי זה: קרא אותה מהמסמך העדכני (node whatsapp-assistant/tools/coach.js dashboardDocText '["${p.name}","program"]'), שנה רק מה שאושר, ובצע עם dashboardDocReplace. תבדוק ב-plan שהאפליקציה מראה נכון, ותרשום ב-undo-log איך מחזירים. ` +
+      `דווח לאביאל בקצרה מה השתנה בכל אימון, ובסוף שאלה אחת: *1* · לשלוח ל${p.name.split(' ')[0]} הודעה קצרה שעדכנתי לו את התוכנית ולמה / *2* · לא לשלוח. לא לשלוח כלום למתאמן בלי תשובה.` + (await sendStateBlock()))
+    const { text: t0, notes } = await runActions(ans); const { text: t1, polls } = splitPolls(t0), { text: t, files } = splitFiles(t1)
+    const reply = [t, notes.join('\n')].filter(Boolean).join('\n\n'); if (reply) await msg.reply(toWhatsApp(reply)); await sendBrainFiles(files); await sendBrainPolls(polls)
+  } catch (e) { console.error('[photo-recs apply]', e.message); await msg.reply(toWhatsApp('לא הצלחתי לעדכן את התוכנית עכשיו. תכתוב לי שוב בעוד רגע.')).catch(() => {}) }
+}
+
 async function coachAlertsPull() {
   if (!config.owner || !clientReady) return
   try { await foodReview.resume() } catch (e) {}
   try {
     const r = await fetch('https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec', { method: 'POST', body: JSON.stringify({ api: 'coach', k: 'c7dfe880cf024fc59fcc9a8a', fn: 'dashboardCoachAlerts', args: [] }) })
     const j = await r.json(), q = (j && j.ok && Array.isArray(j.r)) ? j.r : []
-    for (const a of q) { if (a.kind === 'tech' && a.name && a.reply) TECH_PENDING[String(a.name).split(' ')[0]] = { name: a.name, reply: a.reply, at: Date.now() }; if (a.kind === 'swap' && a.name && a.id) SWAP_PENDING[String(a.name).split(' ')[0]] = { name: a.name, id: a.id, at: Date.now() }; if (a.kind === 'meet' && a.name && a.text) MEET_PENDING[String(a.name).split(' ')[0]] = { name: a.name, text: a.text, at: Date.now() }; const sentA = await client.sendMessage(a.kind === 'upd' && updGid() ? updGid() : config.owner, toWhatsApp(drafts.stripEmoji(a.kind === 'upd' ? updShort(a) : '*' + a.title + '*\n' + (a.body || '')).trim())).catch(() => null); if ((a.kind === 'blood' || a.kind === 'brain') && a.name) { try { bloodGate.remember(sentA, a.name, a.kind, a.opts) } catch (e) {} } }
+    for (const a of q) { if (a.kind === 'tech' && a.name && a.reply) TECH_PENDING[String(a.name).split(' ')[0]] = { name: a.name, reply: a.reply, at: Date.now() }; if (a.kind === 'swap' && a.name && a.id) SWAP_PENDING[String(a.name).split(' ')[0]] = { name: a.name, id: a.id, at: Date.now() }; if (a.kind === 'meet' && a.name && a.text) MEET_PENDING[String(a.name).split(' ')[0]] = { name: a.name, text: a.text, at: Date.now() }; { const pn = String(a.name || (String(a.title || '').split(':')[1]) || '').trim(); if (a.kind === 'upd' && pn && /^תמונות/.test(String(a.title || '')) && await sendPhotoRecs(pn).catch(() => false)) continue } const sentA = await client.sendMessage(a.kind === 'upd' && updGid() ? updGid() : config.owner, toWhatsApp(drafts.stripEmoji(a.kind === 'upd' ? updShort(a) : '*' + a.title + '*\n' + (a.body || '')).trim())).catch(() => null); if ((a.kind === 'blood' || a.kind === 'brain') && a.name) { try { bloodGate.remember(sentA, a.name, a.kind, a.opts) } catch (e) {} } }
   } catch (e) { console.error('coachAlertsPull', e.message) }
 }
 cron.schedule('*/2 * * * *', coachAlertsPull, { timezone: 'Asia/Jerusalem' })
@@ -1948,6 +1980,11 @@ function onIncoming0(msg) {
       if (bloodGate.isMissingCmd(text)) { queue = queue.then(() => bloodGate.missing()).catch((e) => console.error('[blood-gate]', e)); return } }
     { const mq0 = msg.hasQuotedMsg && config.owner && cid === config.owner && mealRelay.qidByStanza(msg._data && msg._data.quotedStanzaID) // 18.11.26: "כן"/תיקון על הודעת ארוחה — לפני הטיוטות
       if (mq0) { queue = queue.then(() => mealRelay.fix(mq0, text)).catch((e) => { console.error('[meal-fix]', e); client.sendMessage(config.owner, toWhatsApp('התיקון לארוחה לא עבר: ' + String(e.message || e).slice(0, 120))).catch(() => {}) }); return } }
+    // 23.11.26: תשובה במספרים להמלצות מניתוח תמונות (בציטוט, או כשזו ההודעה האחרונה שהוצגה)
+    if (PHOTO_REC && Date.now() - PHOTO_REC.at < 12 * 3600e3 && /^\s*\d(?:[\s,ו]+\d)*\s*$/.test(text)) {
+      const qid = msg.hasQuotedMsg && msg._data && msg._data.quotedStanzaID, quotedMine = qid && PHOTO_REC.msgId && PHOTO_REC.msgId.endsWith('_' + qid)
+      if (quotedMine || PHOTO_REC.at > lastOfferedAt) { const picks = [...new Set((text.match(/\d/g) || []).map(Number))].filter((n) => n >= 1 && n <= PHOTO_REC.recs.length)
+        if (picks.length) { queue = queue.then(() => applyPhotoRecs(msg, picks)).catch((e) => console.error('[photo-recs]', e)); return } } }
     let draftCmd = drafts.parseCommand(text)
     // 22.11.26: תשובה למספר אחרי "יש כמה" → מבצעים את הפקודה המקורית על הטיוטה שנבחרה
     if (draftCmd && draftCmd.type === 'pick' && AMBIG && Date.now() - AMBIG.at < 15 * 60e3 && AMBIG.ids.includes(Number(draftCmd.ref))) { draftCmd = { ...AMBIG.cmd, ref: draftCmd.ref }; AMBIG = null }
