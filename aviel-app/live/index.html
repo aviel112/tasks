@@ -4517,6 +4517,42 @@ function wtOpen(x){ if(WT_RUN) return; var ph=wtPhases(x), i=-1, end=0, left=0, 
   var st=document.createElement('style'); st.textContent='.wtl .wti{display:flex;align-items:center;gap:12px;padding:10px 0}.wtl .wti+.wti{border-top:1px solid var(--line)}.wtl .wtt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}.wtl .wtt b{font-size:15px;font-weight:600}.wtl .wtt small{font-size:13px;color:var(--mute)}.wtl .wti.ok .wtt small{color:var(--gold)}.wtl .wtbar{height:4px;border-radius:2px;background:var(--line);overflow:hidden;margin-top:3px}.wtl .wtbar i{display:block;height:100%;background:var(--gold);border-radius:2px}.wtl .wtgo{flex:none;min-height:40px;padding:0 18px;border-radius:20px;border:0;background:var(--gold);color:#14110b;font-weight:700;font-size:14.5px}.wtl .wti.ok .wtgo{background:transparent;color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}.wtl .wtgo:focus-visible,.wtr button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}.wtr{text-align:center}.wtr .wtph{font-size:17px;color:var(--mute);margin-top:6px;min-height:24px}.wtr .wtph.hold{color:var(--gold);font-weight:700}.wtr{min-height:74vh;display:flex;flex-direction:column;justify-content:center}.wtr .wtring{position:relative;width:236px;height:236px;margin:14px auto 10px}.wtr .wtring svg{width:100%;height:100%;display:block}.wtr .wtring circle{fill:none;stroke-width:5}.wtr .wtring .bg{stroke:var(--line)}.wtr .wtring .fg{stroke:var(--mute);stroke-linecap:round}.wtr .wtring.hold .fg{stroke:var(--gold)}.wtr .wtnum{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:92px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}.wtr .wtring:not(.hold) .wtnum{color:var(--mute)}.wtr .wtdots{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;margin:0 24px 10px}.wtr .wtdots i{width:9px;height:9px;border-radius:50%;background:var(--line)}.wtr .wtdots i.on{background:var(--gold)}.wtr .wtdots i.cur{background:transparent;box-shadow:inset 0 0 0 2px var(--gold)}.wtr .wtleft{font-size:13.5px;color:var(--mute);margin-bottom:18px;font-variant-numeric:tabular-nums}.wtr .wtsub{font-size:15px;color:var(--text);min-height:22px;margin-bottom:12px}.wtr .wtmain{display:block;width:100%;min-height:52px;border-radius:26px;border:0;background:var(--gold);color:#14110b;font-size:17px;font-weight:700;margin-bottom:8px}'; document.head.appendChild(st); })();
 /* 22.11.26 (אביאל: "למה צריך טיימר בסוף האימון"): אחרי הסט האחרון באימון אין מנוחה — אין סט הבא לנוח לקראתו */
 (function(){ var _rs=window.restStart; window.restStart=function(min){ try{ var box=document.getElementById('progBox'); if(box&&box.querySelector('form.setrow')&&!box.querySelector('form.setrow:not(.ok)')) return; }catch(e){} return _rs.apply(this,arguments); }; })();
+/* ===== 23.11.26 (אביאל: "לוקח המון זמן לקליטת התמונות ואני מפחד שזה נמחק — תבדוק פעמיים אחרי שסוגרים") =====
+   1) כל תמונה נשמרת קודם בטלפון (תור), ורק אז עולה — סגירה של המסך או של האפליקציה לא מאבדת אותה; בפתיחה הבאה ממשיכה לבד.
+   2) משבצת שעולה נשארת "שומר…" גם כשמשבצת אחרת מסיימת (קודם חזרה ל"לצילום" ונראתה כאילו נמחקה).
+   3) אחרי ההעלאה בודקים שהתמונה באמת בשרת; ואחרי סגירה — עוד שתי בדיקות (20 שנ' ודקה וחצי). חסרה? עולה שוב מהטלפון. */
+var PHQ_K='aviel_ph_q', PH_BUSY={};
+function phQ(){ try{ var q=JSON.parse(localStorage.getItem(PHQ_K)||'[]'); return Array.isArray(q)?q:[]; }catch(e){ return PHQ_MEM||[]; } }
+var PHQ_MEM=null;
+function phQSet(q){ PHQ_MEM=q; try{ localStorage.setItem(PHQ_K,JSON.stringify(q)); }catch(e){ /* אין מקום — נשאר בזיכרון עד שהאפליקציה נסגרת */ } }
+function phOnServer(list,d,pose){ return (list||[]).some(function(x){ return x&&x.d===d&&x.pose===pose; }); }
+function phMarkDone(pose,d){ if(d!==TODAY) return; var dn=phDone(); if(dn.indexOf(pose)<0){ dn.push(pose); lsSet('aviel_ph_poses_'+TODAY,dn); } }
+function phRefreshUI(){ try{ phSheetRefresh(); }catch(e){} try{ phGate(); }catch(e){} }
+var _phSlotsQ=phSlotsHtml; phSlotsHtml=function(){ var h=_phSlotsQ.apply(this,arguments); try{ var busy=phQ().map(function(x){ return x.pose; }).concat(Object.keys(PH_BUSY)), dn=phDone(); if(!busy.length) return h;
+  var tmp=document.createElement('div'); tmp.innerHTML=h; tmp.querySelectorAll('input[data-pose]').forEach(function(i){ var p=i.getAttribute('data-pose'); if(busy.indexOf(p)<0||dn.indexOf(p)>=0) return; var l=i.closest('.phs'); if(!l) return; l.classList.add('busy'); var sm=l.querySelector('small'); if(sm) sm.textContent='שומר… אפשר לסגור'; }); h=tmp.innerHTML; }catch(e){} return h; };
+function phSend(it){ PH_BUSY[it.pose]=1; phRefreshUI();
+  var ctl=typeof AbortController!=='undefined'?new AbortController():null, to=setTimeout(function(){ try{ ctl&&ctl.abort(); }catch(e){} },120000);
+  return fetch(API,{method:'POST',body:JSON.stringify({api:'photo',t:T,p:{full:it.full,thumb:it.thumb,pose:it.pose}}),signal:ctl?ctl.signal:undefined}).then(function(r){ return r.json(); })
+    .then(function(j){ clearTimeout(to); if(!j.ok) throw new Error(j.error||'שגיאה'); if(!phOnServer(j.r,it.d,it.pose)&&it.d===TODAY) throw new Error('לא אומת בשרת');
+      phQSet(phQ().filter(function(x){ return x.id!==it.id; })); delete PH_BUSY[it.pose]; phMarkDone(it.pose,it.d); try{ PHOTOS_L=j.r; renderPhotos(j.r); }catch(e){}
+      var dn=phDone(); toast(dn.length>=4?'כל 4 התמונות נשמרו ונבדקו. תודה':'נשמרה: '+it.pose+'. עוד '+(4-dn.length)); phRefreshUI(); })
+    .catch(function(e){ clearTimeout(to); delete PH_BUSY[it.pose]; var q=phQ(), me=q.filter(function(x){ return x.id===it.id; })[0]; if(!me){ phRefreshUI(); return; }
+      me.tries=(me.tries||0)+1; phQSet(q); phRefreshUI();
+      if(me.tries<5){ PH_BUSY[it.pose]=1; /* ממתין לניסיון הבא — שלא תישלח פעמיים */ setTimeout(function(){ delete PH_BUSY[it.pose]; var cur=phQ().filter(function(x){ return x.id===it.id; })[0]; if(cur) phSend(cur); },[3000,10000,30000,60000][me.tries-1]||60000); }
+      else toast('תמונת '+it.pose+' שמורה בטלפון ועוד לא עלתה. היא תעלה לבד כשיהיה חיבור טוב',1); }); }
+phUpload=function(file,pose,lab){ if(lab){ lab.classList.add('busy'); var sm=lab.querySelector('small'); if(sm) sm.textContent='שומר…'; }
+  return Promise.all([shrink(file,1280,.8),shrink(file,320,.7)]).then(function(x){ var it={id:Date.now()+'-'+Math.random().toString(36).slice(2,6),pose:pose,d:TODAY,full:x[0],thumb:x[1],tries:0};
+      phQSet(phQ().filter(function(y){ return !(y.pose===pose&&y.d===TODAY); }).concat([it])); return phSend(it); })
+    .catch(function(e){ if(lab){ lab.classList.remove('busy'); var sm=lab.querySelector('small'); if(sm) sm.textContent='לצילום'; } toast('לא הצלחתי לקרוא את התמונה, נסו לצלם שוב',1); }); };
+/* בדיקה כפולה אחרי סגירה (ובכל פתיחה): כל מה שמסומן "נשמר" היום — באמת בשרת? */
+function phVerify(){ if(!T||typeof api!=='function') return; var dn=phDone(); if(!dn.length&&!phQ().length) return;
+  api0('photos',{}).then(function(list){ PHOTOS_L=list; var q=phQ(), lost=[];
+    dn.forEach(function(p){ if(!phOnServer(list,TODAY,p)&&!q.some(function(x){ return x.pose===p&&x.d===TODAY; })&&!PH_BUSY[p]) lost.push(p); });
+    q.forEach(function(x){ if(phOnServer(list,x.d,x.pose)){ phQSet(phQ().filter(function(y){ return y.id!==x.id; })); phMarkDone(x.pose,x.d); } else if(!PH_BUSY[x.pose]) phSend(x); });
+    if(lost.length){ lsSet('aviel_ph_poses_'+TODAY,dn.filter(function(p){ return lost.indexOf(p)<0; })); toast('לא מצאתי בשרת: '+lost.join(', ')+'. צריך לצלם אותן שוב',1); }
+    phRefreshUI(); }).catch(function(){}); }
+var _vCloseQ=vClose; vClose=function(){ var hadPh=!!document.getElementById('phSheetBox'); var r=_vCloseQ.apply(this,arguments); if(hadPh){ if(phQ().length||Object.keys(PH_BUSY).length) toast('התמונות ממשיכות לעלות ברקע'); setTimeout(phVerify,20000); setTimeout(phVerify,90000); } return r; };
+setTimeout(phVerify,8000); /* בכל פתיחה: מה שנשאר בתור עולה, ומה שסומן נבדק מול השרת */
 </script>
 <script>
 (function(){ var b=document.getElementById('thBtn'); if(!b) return;
