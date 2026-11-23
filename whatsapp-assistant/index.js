@@ -1236,7 +1236,7 @@ async function sendPhotoRecs(name) {
   if (!w || !(w.recs || []).length) return false
   const first = String(name).split(' ')[0]
   let short = null
-  try { const raw = String(await askBrainOnce('קצר כל המלצה לשורה אחת בעברית פשוטה (עד 10 מילים), בלי הסברים, בלי אנגלית. החזר JSON בלבד: {"sum":"משפט אחד על המצב (עד 12 מילים)","recs":["..."]}\nמצב: ' + (w.summary || '') + '\nהמלצות:\n' + w.recs.map((r, i) => (i + 1) + '. ' + r).join('\n'), 'haiku', { label: 'photo-recs' }))
+  try { const raw = String(await askBrainOnce('קצר כל המלצה לשורה אחת בעברית פשוטה כמו שמאמן מדבר (עד 10 מילים), בלי הסברים, בלי אנגלית ובלי מונחים מקצועיים (לא היפרטרופיה). החזר JSON בלבד: {"sum":"משפט אחד על המצב (עד 12 מילים)","recs":["..."]}\nמצב: ' + (w.summary || '') + '\nהמלצות:\n' + w.recs.map((r, i) => (i + 1) + '. ' + r).join('\n'), 'haiku', { label: 'photo-recs' }))
     short = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)) } catch (e) { console.error('[photo-recs]', e.message) }
   const recs = (short && Array.isArray(short.recs) && short.recs.length === w.recs.length) ? short.recs : w.recs.map((r) => r.split(/[,.]/)[0])
   const weak = (w.weak || []).map((x) => x.mu).filter(Boolean).join(', ')
