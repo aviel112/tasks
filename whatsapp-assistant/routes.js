@@ -37,4 +37,9 @@ async function ensure(client, owner) {
     catch (e) { console.error('[routes] createGroup', cat, e.message) } }
   return made
 }
-module.exports = { NAMES, KEYWORD, INTRO, classify, gidFor, catOf, adopt, ensure, load }
+// 23.11.26 (אביאל: "לכל קבוצה מה שמתאים לה"): הודעה אוטומטית שלא זוהתה לא נשארת בצ'אט הפרטי — הולכת לקבוצה לפי נושא
+function fallback(text) { const t = clean(text)
+  if (/מתאמנ|מתאמן|אימונ|תפריט|שקיל|ארוח|צעדים|פגיש|בדיקות דם|תוספ|אפליקצי|טיוט|ליווי|חידוש/.test(t)) return 'coach'
+  if (/ליד|רילס|תוכן|סטורי|אינסטגרם|יוטיוב|וולג|מכיר|תשלום|הכנס|לקוח|קורס|פרוטוקול|עוקבים/.test(t)) return 'biz'
+  return 'personal' }
+module.exports = { fallback, NAMES, KEYWORD, INTRO, classify, gidFor, catOf, adopt, ensure, load }

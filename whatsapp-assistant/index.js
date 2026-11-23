@@ -6,7 +6,9 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { execFile } = require('child_process')
-const { askBrain, askBrainOnce, resetSession, isLimitError } = require('./brain')
+const { askBrain, askBrainOnce, askBrainFull, resetSession, resetFullSession, isLimitError } = require('./brain')
+const { AsyncLocalStorage } = require('async_hooks')
+const CHAT_ALS = new AsyncLocalStorage() // 23.11.26: מה שנשלח בתוך טיפול בהודעה של אביאל בצ'אט הפרטי נשאר בפרטי; כל השאר (אוטומטי) הולך לקבוצה המתאימה
 const biz = require('./business-whatsapp')
 const drafts = require('./drafts')
 const profiles = require('./profiles')
@@ -84,7 +86,7 @@ const OUT_SEEN = [] // הודעות שיצאו בפועל (message_create), 60 �
 const TECH_RE = /```|python3? -c|\bcd ~\/|תריץ (?:את )?(?:הפקודה|זה|אותה|אותו)(?: במסוף| בטרמינל)?|(?:פקודה|הפקודה) (?:במסוף|בטרמינל)|npm (?:run|install)|node [\w./-]+\.js/ // 22.11.26: אביאל לא מקבל קוד/פקודות
 { const _send = client.sendMessage.bind(client); client.sendMessage = (to, ...r) => { let dest = to
     if (to === config.owner && typeof r[0] === 'string' && TECH_RE.test(r[0])) { try { fs.appendFileSync(path.join(ROOT, 'brain', 'tech-todo.md'), `\n## ${new Date().toISOString()}\n${r[0].slice(0, 3000)}\n`) } catch {} console.log('[tech-filter] held a technical message for Claude Code'); r[0] = toWhatsApp('משהו טכני לא הצליח אצלי. העברתי לתיקון, לא צריך לעשות כלום.') }
-    try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); let cat = routes.classify(txt); if ((!cat || cat === 'biz') && aboutTrainee(txt) && !/^\*?(ליד|5 לסגור)/.test(txt.replace(/^[\u200b\s]+/, ''))) cat = 'coach'; dest = routes.gidFor(cat) || to } } } catch (e) { dest = to }
+    try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); let cat = routes.classify(txt); if ((!cat || cat === 'biz') && aboutTrainee(txt) && !/^\*?(ליד|5 לסגור)/.test(txt.replace(/^[\u200b\s]+/, ''))) cat = 'coach'; if (!cat && !(CHAT_ALS.getStore() || {}).chat) cat = routes.fallback(txt); dest = routes.gidFor(cat) || to } } } catch (e) { dest = to }
     const body = typeof r[0] === 'string' ? r[0] : ''
     return _send(dest, ...r).catch(async (e) => { // 22.11.26: ווטסאפ לפעמים זורק שגיאה אחרי שההודעה כבר יצאה → בודקים לפני שמנסים שוב (אחרת כפילויות)
       if (body) { await new Promise((res) => setTimeout(res, 4000)); const hit = OUT_SEEN.find((x) => x.to === dest && x.body === body && Date.now() - x.at < 60000); if (hit) { console.log('[send] error but delivered, not resending'); return hit.msg } }
@@ -1677,7 +1679,8 @@ async function recoverMissed() {
 }
 client.on('ready', () => setTimeout(() => recoverMissed().catch((e) => console.error('[recover]', e.message)), 25 * 1000))
 
-function onIncoming(msg) {
+function onIncoming(msg) { let priv = false; try { priv = !!(config.owner && chatIdOf(msg) === config.owner && !msg.fromMe) } catch {} return priv ? CHAT_ALS.run({ chat: true }, () => onIncoming0(msg)) : onIncoming0(msg) }
+function onIncoming0(msg) {
   try {
     markSeen(msg)
     const cid = chatIdOf(msg)
@@ -1964,7 +1967,7 @@ function onIncoming(msg) {
     }
 
     if (/^(שיחה חדשה|אפס שיחה)$/.test(text)) {
-      resetSession()
+      resetSession(); resetFullSession()
       client.sendMessage(cid, toWhatsApp('פתחתי שיחה חדשה. במה אפשר לעזור?')).catch(console.error)
       return
     }
@@ -2250,8 +2253,9 @@ async function handle(msg, text) {
       typing = setInterval(() => chat.sendStateTyping().catch(() => {}), 8000)
     }
     // "תחשבי לעומק" — מעבר חד-פעמי למודל החזק
-    const deep = /תחשבי לעומק|תחשוב לעומק/.test(text)
-    const answer = await askBrain(text + (await sendStateBlock()), deep ? 'sonnet' : undefined)
+    // 23.11.26 (אביאל: "שיהיה כמו הצ'אט פה איתך"): המוח המלא — המודל החזק, תיקיית הפרויקט, אותו זיכרון, עושה ולא רק עונה
+    let slowT = setTimeout(() => { slowT = null; msg.reply(toWhatsApp('על זה. אעדכן כשמוכן.')).catch(() => {}) }, 75 * 1000)
+    let answer; try { answer = await askBrainFull(text + (await sendStateBlock())) } finally { if (slowT) clearTimeout(slowT) }
     const { text: finalText, notes, offered } = await runActions(answer)
     if (offered) offerDraft(offered); else { lastOfferedDraftId = null; prevOfferedDraftId = null } // תשובה רגילה בצ'אט מבטלת "כן" על התראה ישנה
     const reply = [finalText, notes.join('\n')].filter(Boolean).join('\n\n')
