@@ -112,31 +112,44 @@ const FULL_SESSION = path.join(BRAIN_DIR, '.session-full')
 const FULL_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000
 function fullCfg() { try { const c = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8')); return { model: c.fullModel || 'claude-opus-5-5', fallback: c.fullFallback || 'sonnet' } } catch { return { model: 'claude-opus-5-5', fallback: 'sonnet' } } }
 function fullSession() { try { const st = fs.statSync(FULL_SESSION); if (Date.now() - st.mtimeMs > FULL_MAX_AGE_MS) { fs.unlinkSync(FULL_SESSION); return null } return fs.readFileSync(FULL_SESSION, 'utf8').trim() || null } catch { return null } }
-function runFull(prompt, sid, model) {
+function runFull(prompt, sid, model, fork = false) {
   return new Promise((resolve, reject) => {
     let sys = ''; try { sys = fs.readFileSync(path.join(BRAIN_DIR, 'FULL.md'), 'utf8') } catch {}
     const args = ['-p', prompt, '--output-format', 'json', '--model', model, '--permission-mode', 'auto']
     if (sys) args.push('--append-system-prompt', sys)
     if (sid) args.push('--resume', sid)
+    if (sid && fork) args.push('--fork-session')
     const env = { ...process.env }; delete env.CLAUDECODE; delete env.CLAUDE_CODE_ENTRYPOINT; delete env.ANTHROPIC_API_KEY; env.ENABLE_CLAUDEAI_MCP_SERVERS = 'true'
     const child = execFile(FULL_BIN, args, { cwd: FULL_CWD, env, timeout: 45 * 60 * 1000, maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err && !stdout) return reject(new Error((stderr || err.message || '').slice(0, 500)))
       let out; try { out = JSON.parse(stdout) } catch { return reject(new Error('full brain: bad output — ' + String(stdout).slice(0, 300))) }
-      if (out.session_id) fs.writeFileSync(FULL_SESSION, out.session_id)
+      if (out.session_id && !fork) fs.writeFileSync(FULL_SESSION, out.session_id)
       if (out.is_error) return reject(new Error(String(out.result || 'brain error').slice(0, 500)))
       resolve(out.result || '')
     })
     child.stdin?.end()
   })
 }
-let fullLock = Promise.resolve()
-function askBrainFull(prompt) {
-  const job = fullLock.then(async () => {
-    const { model, fallback } = fullCfg(), sid = fullSession()
-    const go = async (m) => { try { return await runFull(prompt, sid, m) } catch (e) { if (isLimitError(e) || !sid) throw e; try { fs.unlinkSync(FULL_SESSION) } catch {} return runFull(prompt, null, m) } }
-    try { return await go(model) } catch (e) { if (!isLimitError(e) || model === fallback) throw e; return go(fallback) }
-  })
-  fullLock = job.catch(() => {})
+// 23.11.26 (אביאל: "משימות ברקע"): השיחה הראשית רצה אחת-אחת. אם היא עסוקה (משימה ארוכה), הודעה חדשה רצה במקביל
+// כ"ענף" של אותה שיחה (--fork-session: יודע את כל מה שנאמר עד עכשיו, לא דורס את השיחה הראשית). עד 2 ענפים במקביל.
+let fullLock = Promise.resolve(), fullBusy = 0, forks = 0
+const git = (args) => new Promise((res) => execFile('git', args, { cwd: FULL_CWD, timeout: 15000 }, (e, out) => res(e ? '' : String(out).trim())))
+const UNDO_LOG = path.join(BRAIN_DIR, 'undo-log.jsonl')
+async function withUndo(prompt, run) { // כל commit שהמוח עשה בתור — נרשם ביומן ביטול (קוד/אפליקציה); שינויים בשרת הוא רושם בעצמו (FULL.md)
+  const before = await git(['rev-parse', 'HEAD']), out = await run(), after = await git(['rev-parse', 'HEAD'])
+  if (before && after && before !== after) try { fs.appendFileSync(UNDO_LOG, JSON.stringify({ at: new Date().toISOString(), kind: 'git', ask: String(prompt).split('\n')[0].slice(0, 200), before, after }) + '\n') } catch {}
+  return out
+}
+function askBrainFull(prompt, { onFork } = {}) {
+  const { model, fallback } = fullCfg()
+  const withFb = async (go) => { try { return await go(model) } catch (e) { if (!isLimitError(e) || model === fallback) throw e; return go(fallback) } }
+  if (fullBusy && forks < 2) { // ענף במקביל
+    const sid = fullSession(); forks++; if (onFork) try { onFork() } catch {}
+    return withUndo(prompt, () => withFb((m) => runFull(prompt, sid, m, true))).finally(() => { forks-- })
+  }
+  fullBusy++
+  const job = fullLock.then(() => withUndo(prompt, () => withFb(async (m) => { const sid = fullSession(); try { return await runFull(prompt, sid, m) } catch (e) { if (isLimitError(e) || !sid) throw e; try { fs.unlinkSync(FULL_SESSION) } catch {} return runFull(prompt, null, m) } })))
+  fullLock = job.catch(() => {}).finally(() => { fullBusy-- })
   return job
 }
 function resetFullSession() { try { fs.unlinkSync(FULL_SESSION) } catch {} }

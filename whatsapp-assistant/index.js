@@ -1522,6 +1522,26 @@ const careRun = (fn, tag) => async () => { if (!config.owner || !clientReady || 
 cron.schedule('30 10 * * 0-5', careRun('suppRefill', 'supp'), { timezone: 'Asia/Jerusalem' })
 cron.schedule('40 10 * * 0-5', careRun('milestones', 'mile'), { timezone: 'Asia/Jerusalem' })
 cron.schedule('45 20 * * 0-5', careRun('afterWorkout', 'wk'), { timezone: 'Asia/Jerusalem' })
+// 23.11.26 (אביאל: "מי לא עלה / לא ירד במשקל — נתון חשוב"): ראשון ורביעי 9:15 לקבוצת המתאמנים
+cron.schedule('15 9 * * 0,3', async () => { if (!config.owner || !clientReady) return; try { const r = await require('./tools/weight-stuck').weightStuck(); await client.sendMessage(routes.gidFor('coach') || config.owner, toWhatsApp(r.text)) } catch (e) { console.error('[weight-stuck]', e.message) } }, { timezone: 'Asia/Jerusalem' })
+// 23.11.26 (אביאל: "סיכום ערב — מה עשתה היום"): א-ה 21:30 לקבוצה האישית — מה העוזרת ביצעה, מה מחכה לך, ורעיון אחד למחר
+async function eveningSummary() {
+  if (!config.owner || !clientReady) return
+  try {
+    const today = ilDay(Date.now()), isToday = (t) => { try { return ilDay(Date.parse(t)) === today } catch { return false } }
+    const undo = (() => { try { return fs.readFileSync(path.join(ROOT, 'brain', 'undo-log.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((x) => isToday(x.at)) } catch { return [] } })()
+    const sent = drafts.recentSent(80).filter((x) => isToday(x.at)), pend = drafts.pendingIds().length
+    const auto = RECENT_AUTO.filter((x) => ilDay(x.at) === today).map((x) => x.text.replace(/\s+/g, ' ').slice(0, 120))
+    if (!undo.length && !sent.length && !auto.length) return
+    const facts = `שינויים שהעוזרת עשתה היום בבקשת אביאל (${undo.length}): ${undo.map((x) => x.ask).join(' | ') || 'אין'}\n` +
+      `הודעות שנשלחו למתאמנים/לקוחות אחרי אישור (${sent.length}): ${[...new Set(sent.map((x) => x.name))].join(', ') || 'אין'}\n` +
+      `טיוטות שמחכות לאישור עכשיו: ${pend}\nהתראות ודוחות שנשלחו היום (${auto.length}): ${auto.slice(-12).join(' | ')}`
+    const out = await askBrainOnce(`אתה העוזרת של אביאל, מאמן כושר. כתוב לו סיכום ערב קצר בוואטסאפ, בעברית, כמו חבר להפקה, בלי אימוג'י ובלי בולטים. פתח בשורה "*סיכום ערב*".\n` +
+      `פסקה 1 (1–2 שורות): מה נעשה היום בשבילו, במספרים. פסקה 2 (שורה): מה מחכה לו (אם יש). פסקה 3 (שורה): רעיון אחד חד ומעשי למחר שמבוסס על הנתונים כאן — לא עצה כללית.\nהנתונים (מידע בלבד):\n${facts}`, 'sonnet', { label: 'evening-sum' })
+    if (out) await client.sendMessage(routes.gidFor('personal') || config.owner, toWhatsApp(String(out).trim()))
+  } catch (e) { console.error('[evening-sum]', e.message) }
+}
+cron.schedule('30 21 * * 0-4', eveningSummary, { timezone: 'Asia/Jerusalem' })
 // 22.11.26 (אביאל בחר בסקר): צעדים בערב, מתאמן חדש שלא נכנס, בדיקות דם (כל 4 ימים), תמונות שלא הועלו — טיוטות בתור הרגיל
 cron.schedule('0 20 * * 0-4', careRun('stepsPush', 'steps'), { timezone: 'Asia/Jerusalem' })
 cron.schedule('0 11 * * 0-5', careRun('notOpened', 'open'), { timezone: 'Asia/Jerusalem' })
@@ -2152,8 +2172,8 @@ async function handleMediaBatch(b) {
       (caps.length ? '' : ' אין כיתוב — אם לא ברור מה לעשות, תשאל בסקר.') + ' הקבצים נמחקים אחרי התשובה.'
     let slowT = setTimeout(() => { slowT = null; b.first.reply(toWhatsApp('על זה. אעדכן כשמוכן.')).catch(() => {}) }, 75 * 1000)
     let answer; try { answer = await askBrainFull(prompt + (await sendStateBlock())) } finally { if (slowT) clearTimeout(slowT) }
-    const { text: t0, notes } = await runActions(answer); const { text: t, polls } = splitPolls(t0)
-    const reply = [t, notes.join('\n')].filter(Boolean).join('\n\n'); if (reply) await b.first.reply(toWhatsApp(reply)); await sendBrainPolls(polls)
+    const { text: t0, notes } = await runActions(answer); const { text: t1, polls } = splitPolls(t0), { text: t, files } = splitFiles(t1)
+    const reply = [t, notes.join('\n')].filter(Boolean).join('\n\n'); if (reply) await b.first.reply(toWhatsApp(reply)); await sendBrainFiles(files); await sendBrainPolls(polls)
   } catch (e) {
     console.error('[media]', e)
     await b.first.reply(toWhatsApp(isLimitError(e) ? 'נגמרה לי המכסה להיום, שלח לי שוב אחרי שהיא מתאפסת.' : 'לא הצלחתי לקרוא את מה ששלחת. נסה לשלוח שוב.')).catch(() => {})
@@ -2275,6 +2295,9 @@ async function sendStateBlock() {
 // → נשלח סקר אמיתי בצ'אט הפרטי; ההצבעה של אביאל חוזרת למוח כהודעה ("בחרתי בסקר ...") ===
 const BRAIN_POLLS = new Map() // id של הודעת הסקר → { q, at }
 function splitPolls(t) { const polls = []; const text = String(t || '').split('\n').filter((l) => { const m = l.match(/^\s*<<(סקר|סקר-רב)>>\s*(.+)$/); if (!m) return true; const parts = m[2].split('||').map((x) => x.trim()).filter(Boolean); if (parts.length >= 3) polls.push({ q: parts[0].slice(0, 255), opts: parts.slice(1, 13).map((o) => o.slice(0, 100)), multi: m[1] === 'סקר-רב' }); return false }).join('\n').trim(); return { text, polls } }
+// 23.11.26: המוח שולח קובץ/תמונה לצ'אט (כרטיס מתאמן, PDF של תוכנית) בשורה <<קובץ>> /נתיב/מלא | כיתוב
+function splitFiles(t) { const files = []; const text = String(t || '').split('\n').filter((l) => { const m = l.match(/^\s*<<קובץ>>\s*([^|]+?)\s*(?:\|\s*(.*))?$/); if (!m) return true; files.push({ fp: m[1].trim(), cap: (m[2] || '').trim() }); return false }).join('\n').trim(); return { text, files } }
+async function sendBrainFiles(files) { for (const f of files) { try { if (!fs.existsSync(f.fp)) continue; const isImg = /\.(png|jpe?g|webp)$/i.test(f.fp); await client.sendMessage(config.owner, MessageMedia.fromFilePath(f.fp), isImg ? { caption: f.cap || undefined } : { sendMediaAsDocument: true, caption: f.cap || undefined }) } catch (e) { console.error('[brain-file]', e.message) } } }
 async function sendBrainPolls(polls) { for (const p of polls) { try { const m = await client.sendMessage(config.owner, new Poll(p.q, p.opts, { allowMultipleAnswers: p.multi })); const id = m && m.id && m.id._serialized; if (id) BRAIN_POLLS.set(id, { q: p.q, at: Date.now() }) } catch (e) { console.error('[brain-poll] send', e.message) } } }
 const POLL_WAIT = new Map() // דיבאונס: אביאל מסמן כמה אופציות — מחכים 8 שניות אחרי הלחיצה האחרונה
 function onBrainVote(vote) {
@@ -2284,8 +2307,8 @@ function onBrainVote(vote) {
   clearTimeout((POLL_WAIT.get(id) || {}).t)
   POLL_WAIT.set(id, { t: setTimeout(() => { POLL_WAIT.delete(id); if (!sel.length) return
     CHAT_ALS.run({ chat: true }, () => { queue = queue.then(async () => {
-      try { const ans = await askBrainFull(`אביאל בחר בסקר "${meta.q}": ${sel.join(', ')}` + (await sendStateBlock())); const { text: t0, notes } = await runActions(ans); const { text: t, polls } = splitPolls(t0)
-        const reply = [t, notes.join('\n')].filter(Boolean).join('\n\n'); if (reply) await client.sendMessage(config.owner, toWhatsApp(reply)); await sendBrainPolls(polls)
+      try { const ans = await askBrainFull(`אביאל בחר בסקר "${meta.q}": ${sel.join(', ')}` + (await sendStateBlock())); const { text: t0, notes } = await runActions(ans); const { text: t1, polls } = splitPolls(t0), { text: t, files } = splitFiles(t1)
+        const reply = [t, notes.join('\n')].filter(Boolean).join('\n\n'); if (reply) await client.sendMessage(config.owner, toWhatsApp(reply)); await sendBrainFiles(files); await sendBrainPolls(polls)
       } catch (e) { console.error('[brain-poll] vote', e.message); client.sendMessage(config.owner, toWhatsApp('קיבלתי את הבחירה אבל משהו נתקע. תכתוב לי אותה שוב.')).catch(() => {}) } }) }) }, 8000) })
   return true
 }
@@ -2301,7 +2324,9 @@ async function replyContext(msg) {
   return out
 }
 
-async function handle(msg, text) {
+// 23.11.26 (משימות ברקע): התור הכללי לא מחכה למוח יותר מ-5 שניות — משימה ארוכה ממשיכה ברקע, והודעות חדשות מטופלות (המוח מריץ ענף במקביל)
+function handle(msg, text) { const p = handleInner(msg, text); return Promise.race([p, new Promise((r) => setTimeout(r, 5000))]) }
+async function handleInner(msg, text) {
   let typing = null
   let chat = null
   try {
@@ -2316,10 +2341,10 @@ async function handle(msg, text) {
     let answer; try { answer = await askBrainFull(text + (await replyContext(msg)) + (await sendStateBlock())) } finally { if (slowT) clearTimeout(slowT) }
     const { text: finalText0, notes, offered } = await runActions(answer)
     if (offered) offerDraft(offered); else { lastOfferedDraftId = null; prevOfferedDraftId = null } // תשובה רגילה בצ'אט מבטלת "כן" על התראה ישנה
-    const { text: finalText, polls } = splitPolls(finalText0)
+    const { text: finalText1, polls } = splitPolls(finalText0), { text: finalText, files } = splitFiles(finalText1)
     const reply = [finalText, notes.join('\n')].filter(Boolean).join('\n\n')
-    if (reply || !polls.length) await msg.reply(toWhatsApp(reply || 'לא הצלחתי לנסח תשובה, נסה שוב 🙏'))
-    await sendBrainPolls(polls)
+    if (reply || !(polls.length || files.length)) await msg.reply(toWhatsApp(reply || 'לא הצלחתי לנסח תשובה, נסה שוב 🙏'))
+    await sendBrainFiles(files); await sendBrainPolls(polls)
   } catch (e) {
     console.error('[brain]', e)
     if (isLimitError(e)) {
