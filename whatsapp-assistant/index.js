@@ -424,6 +424,7 @@ function checkApartmentReport() {
 }
 setInterval(checkApartmentReport, 2 * 60 * 1000)
 client.on('vote_update', (vote) => {
+  try { if (onBrainVote(vote)) return } catch (e) { console.error('[brain-poll]', e.message) }
   try {
     const pm = vote.parentMessage
     const key = vote.parentMsgKey || {}
@@ -1738,10 +1739,7 @@ function onIncoming0(msg) {
     // 16.11.26 צילום / הקלטת מסך של התיק עם "תיק" בכיתוב → עדכון האחזקות בסוכן המניות
     if ((msg.type === 'image' || msg.type === 'video') && config.owner && cid === config.owner && stocks.isMediaCaption(text)) { stocksFromMedia(msg); return }
     if ((msg.type === 'image' || msg.type === 'document') && config.owner && cid === config.owner && bloodCandidate(msg, text)) { queue = queue.then(() => bloodFromChat(msg, text)).catch((e) => console.error('[blood]', e)); return }
-    if (msg.type === 'image' && config.owner && cid === config.owner) {
-      queue = queue.then(() => handlePhoto(msg, text)).catch((e) => console.error('[queue]', e))
-      return
-    }
+    if ((msg.type === 'image' || msg.type === 'document') && config.owner && cid === config.owner) { photoBatchAdd(msg, text); return } // 23.11.26: תמונות/קבצים → המוח המלא, כמה תמונות ברצף = משימה אחת
 
     if (!text || text.startsWith(BOT_MARK)) return // לא להגיב לעצמנו
 
@@ -2132,6 +2130,34 @@ async function handleVoice(msg) {
 const PHOTOS_DIR = path.join(ROOT, 'photos')
 if (!fs.existsSync(PHOTOS_DIR)) fs.mkdirSync(PHOTOS_DIR)
 
+// 23.11.26 (אביאל: "תמונה ← תוכנית/תפריט באפליקציה"): כמה תמונות/קבצים שנשלחים ברצף (עד 20 שנ' ביניהם) עוברים יחד למוח המלא
+let PHOTO_BATCH = null
+function photoBatchAdd(msg, caption) {
+  if (!PHOTO_BATCH) PHOTO_BATCH = { items: [], t: null, first: msg }
+  PHOTO_BATCH.items.push({ msg, caption: String(caption || '').trim() }); clearTimeout(PHOTO_BATCH.t)
+  PHOTO_BATCH.t = setTimeout(() => { const b = PHOTO_BATCH; PHOTO_BATCH = null; queue = queue.then(() => handleMediaBatch(b)).catch((e) => console.error('[media]', e)) }, 20000)
+}
+async function handleMediaBatch(b) {
+  const files = []
+  try {
+    for (const it of b.items) { const media = await it.msg.downloadMedia().catch(() => null); if (!media || !media.data) continue
+      const mt = media.mimetype || '', ext = mt.includes('png') ? 'png' : mt.includes('pdf') ? 'pdf' : mt.includes('word') ? 'docx' : mt.includes('sheet') ? 'xlsx' : mt.startsWith('image/') ? 'jpg' : ((media.filename || '').split('.').pop() || 'bin').slice(0, 5)
+      const fp = path.join(PHOTOS_DIR, `in-${Date.now()}-${files.length}.${ext}`); fs.writeFileSync(fp, Buffer.from(media.data, 'base64')); files.push({ fp, caption: it.caption, name: media.filename || '' }) }
+    if (!files.length) throw new Error('no media')
+    const caps = files.map((f) => f.caption).filter(Boolean)
+    const prompt = `אביאל שלח בצ'אט ${files.length > 1 ? files.length + ' קבצים' : 'קובץ'}:\n` + files.map((f, i) => `${i + 1}. ${f.fp}${f.name ? ' (' + f.name + ')' : ''}${f.caption ? ' — "' + f.caption + '"' : ''}`).join('\n') +
+      '\nתסתכל עליהם (Read) ותבין מה הוא רוצה מהכיתוב. אם זו תוכנית אימון או תפריט של מתאמן — לבנות אותם באפליקציה של המתאמן לפי הסקיל new-trainee (סעיפים 2–3), לבדוק ב-plan ולדווח. אם זו תמונת התקדמות / משהו אחר — לפי "ניתוח תמונות" ב-whatsapp-assistant/brain/CLAUDE.md.' +
+      (caps.length ? '' : ' אין כיתוב — אם לא ברור מה לעשות, תשאל בסקר.') + ' הקבצים נמחקים אחרי התשובה.'
+    let slowT = setTimeout(() => { slowT = null; b.first.reply(toWhatsApp('על זה. אעדכן כשמוכן.')).catch(() => {}) }, 75 * 1000)
+    let answer; try { answer = await askBrainFull(prompt + (await sendStateBlock())) } finally { if (slowT) clearTimeout(slowT) }
+    const { text: t0, notes } = await runActions(answer); const { text: t, polls } = splitPolls(t0)
+    const reply = [t, notes.join('\n')].filter(Boolean).join('\n\n'); if (reply) await b.first.reply(toWhatsApp(reply)); await sendBrainPolls(polls)
+  } catch (e) {
+    console.error('[media]', e)
+    await b.first.reply(toWhatsApp(isLimitError(e) ? 'נגמרה לי המכסה להיום, שלח לי שוב אחרי שהיא מתאפסת.' : 'לא הצלחתי לקרוא את מה ששלחת. נסה לשלוח שוב.')).catch(() => {})
+  } finally { for (const f of files) fs.rmSync(f.fp, { force: true }) }
+}
+
 async function handlePhoto(msg, caption) {
   let filePath = null
   try {
@@ -2243,6 +2269,25 @@ async function sendStateBlock() {
     (prefs ? `\n[כללים קבועים שאביאל ביקש — חובה]\n${prefs}` : '')
 }
 
+// ── 23.11.26 (אביאל: "סקר לחיצות בוואטסאפ"): המוח המלא יכול לסיים תשובה בשורה <<סקר>> / <<סקר-רב>> שאלה || אופציה || אופציה
+// → נשלח סקר אמיתי בצ'אט הפרטי; ההצבעה של אביאל חוזרת למוח כהודעה ("בחרתי בסקר ...") ===
+const BRAIN_POLLS = new Map() // id של הודעת הסקר → { q, at }
+function splitPolls(t) { const polls = []; const text = String(t || '').split('\n').filter((l) => { const m = l.match(/^\s*<<(סקר|סקר-רב)>>\s*(.+)$/); if (!m) return true; const parts = m[2].split('||').map((x) => x.trim()).filter(Boolean); if (parts.length >= 3) polls.push({ q: parts[0].slice(0, 255), opts: parts.slice(1, 13).map((o) => o.slice(0, 100)), multi: m[1] === 'סקר-רב' }); return false }).join('\n').trim(); return { text, polls } }
+async function sendBrainPolls(polls) { for (const p of polls) { try { const m = await client.sendMessage(config.owner, new Poll(p.q, p.opts, { allowMultipleAnswers: p.multi })); const id = m && m.id && m.id._serialized; if (id) BRAIN_POLLS.set(id, { q: p.q, at: Date.now() }) } catch (e) { console.error('[brain-poll] send', e.message) } } }
+const POLL_WAIT = new Map() // דיבאונס: אביאל מסמן כמה אופציות — מחכים 8 שניות אחרי הלחיצה האחרונה
+function onBrainVote(vote) {
+  const pm = vote.parentMessage, id = (pm && pm.id && pm.id._serialized) || (vote.parentMsgKey && vote.parentMsgKey._serialized) || ''
+  const meta = BRAIN_POLLS.get(id); if (!meta) return false
+  const sel = (vote.selectedOptions || []).map((o) => o.name).filter(Boolean)
+  clearTimeout((POLL_WAIT.get(id) || {}).t)
+  POLL_WAIT.set(id, { t: setTimeout(() => { POLL_WAIT.delete(id); if (!sel.length) return
+    CHAT_ALS.run({ chat: true }, () => { queue = queue.then(async () => {
+      try { const ans = await askBrainFull(`אביאל בחר בסקר "${meta.q}": ${sel.join(', ')}` + (await sendStateBlock())); const { text: t0, notes } = await runActions(ans); const { text: t, polls } = splitPolls(t0)
+        const reply = [t, notes.join('\n')].filter(Boolean).join('\n\n'); if (reply) await client.sendMessage(config.owner, toWhatsApp(reply)); await sendBrainPolls(polls)
+      } catch (e) { console.error('[brain-poll] vote', e.message); client.sendMessage(config.owner, toWhatsApp('קיבלתי את הבחירה אבל משהו נתקע. תכתוב לי אותה שוב.')).catch(() => {}) } }) }) }, 8000) })
+  return true
+}
+
 async function handle(msg, text) {
   let typing = null
   let chat = null
@@ -2256,10 +2301,12 @@ async function handle(msg, text) {
     // 23.11.26 (אביאל: "שיהיה כמו הצ'אט פה איתך"): המוח המלא — המודל החזק, תיקיית הפרויקט, אותו זיכרון, עושה ולא רק עונה
     let slowT = setTimeout(() => { slowT = null; msg.reply(toWhatsApp('על זה. אעדכן כשמוכן.')).catch(() => {}) }, 75 * 1000)
     let answer; try { answer = await askBrainFull(text + (await sendStateBlock())) } finally { if (slowT) clearTimeout(slowT) }
-    const { text: finalText, notes, offered } = await runActions(answer)
+    const { text: finalText0, notes, offered } = await runActions(answer)
     if (offered) offerDraft(offered); else { lastOfferedDraftId = null; prevOfferedDraftId = null } // תשובה רגילה בצ'אט מבטלת "כן" על התראה ישנה
+    const { text: finalText, polls } = splitPolls(finalText0)
     const reply = [finalText, notes.join('\n')].filter(Boolean).join('\n\n')
-    await msg.reply(toWhatsApp(reply || 'לא הצלחתי לנסח תשובה, נסה שוב 🙏'))
+    if (reply || !polls.length) await msg.reply(toWhatsApp(reply || 'לא הצלחתי לנסח תשובה, נסה שוב 🙏'))
+    await sendBrainPolls(polls)
   } catch (e) {
     console.error('[brain]', e)
     if (isLimitError(e)) {
