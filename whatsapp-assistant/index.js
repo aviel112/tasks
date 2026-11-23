@@ -8,6 +8,7 @@ const os = require('os')
 const { execFile } = require('child_process')
 const { askBrain, askBrainOnce, askBrainFull, resetSession, resetFullSession, isLimitError } = require('./brain')
 const { AsyncLocalStorage } = require('async_hooks')
+const RECENT_AUTO = [] // 23.11.26: הודעות אוטומטיות אחרונות לאביאל (דוחות, טיוטות, התראות) — כדי שהמוח יבין על מה הוא עונה
 const CHAT_ALS = new AsyncLocalStorage() // 23.11.26: מה שנשלח בתוך טיפול בהודעה של אביאל בצ'אט הפרטי נשאר בפרטי; כל השאר (אוטומטי) הולך לקבוצה המתאימה
 const biz = require('./business-whatsapp')
 const drafts = require('./drafts')
@@ -88,6 +89,7 @@ const TECH_RE = /```|python3? -c|\bcd ~\/|תריץ (?:את )?(?:הפקודה|ז�
     if (to === config.owner && typeof r[0] === 'string' && TECH_RE.test(r[0])) { try { fs.appendFileSync(path.join(ROOT, 'brain', 'tech-todo.md'), `\n## ${new Date().toISOString()}\n${r[0].slice(0, 3000)}\n`) } catch {} console.log('[tech-filter] held a technical message for Claude Code'); r[0] = toWhatsApp('משהו טכני לא הצליח אצלי. העברתי לתיקון, לא צריך לעשות כלום.') }
     try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); let cat = routes.classify(txt); if ((!cat || cat === 'biz') && aboutTrainee(txt) && !/^\*?(ליד|5 לסגור)/.test(txt.replace(/^[\u200b\s]+/, ''))) cat = 'coach'; if (!cat && !(CHAT_ALS.getStore() || {}).chat) cat = routes.fallback(txt); dest = routes.gidFor(cat) || to } } } catch (e) { dest = to }
     const body = typeof r[0] === 'string' ? r[0] : ''
+    try { if ((to === config.owner || routes.catOf(to)) && !(CHAT_ALS.getStore() || {}).chat) { const tx = body || ((r[1] && r[1].caption) || '') || (r[0] && r[0].pollName ? 'סקר: ' + r[0].pollName : ''); if (tx) { RECENT_AUTO.push({ at: Date.now(), where: routes.catOf(dest) || 'פרטי', text: String(tx).slice(0, 600) }); while (RECENT_AUTO.length > 25) RECENT_AUTO.shift() } } } catch {}
     return _send(dest, ...r).catch(async (e) => { // 22.11.26: ווטסאפ לפעמים זורק שגיאה אחרי שההודעה כבר יצאה → בודקים לפני שמנסים שוב (אחרת כפילויות)
       if (body) { await new Promise((res) => setTimeout(res, 4000)); const hit = OUT_SEEN.find((x) => x.to === dest && x.body === body && Date.now() - x.at < 60000); if (hit) { console.log('[send] error but delivered, not resending'); return hit.msg } }
       if (dest !== to) { console.error('[routes] group send failed, falling back', e.message); return _send(to, ...r) } throw e }) } } // 5.11.26 מענה בקבוצת העדכונים
@@ -2288,6 +2290,17 @@ function onBrainVote(vote) {
   return true
 }
 
+// 23.11.26 (אביאל: "שאני יכול להגיב לה ושלא תבין על מה אני מדבר"): ההודעה שהוא ציטט + מה נשלח לו לאחרונה אוטומטית
+async function replyContext(msg) {
+  let out = ''
+  try { if (msg.hasQuotedMsg) { const q = await msg.getQuotedMessage().catch(() => null)
+    if (q) { const qt = String(q.body || q.caption || (q.pollName ? 'סקר: ' + q.pollName + ' — ' + (q.pollOptions || []).map((o) => o.name).join(' / ') : '') || (q.type ? '[' + q.type + ']' : '')).replace(/^[​\s]+/, '').slice(0, 2500)
+      out += `\n\n[אביאל הגיב (ציטוט) על ההודעה הזו${q.fromMe ? ' שלך' : ''} — זה ההקשר של מה שהוא כותב:]\n«${qt}»` } } } catch {}
+  const rec = RECENT_AUTO.filter((x) => Date.now() - x.at < 6 * 3600 * 1000).slice(-6)
+  if (rec.length) out += '\n\n[הודעות אוטומטיות אחרונות שנשלחו לאביאל (דוחות/טיוטות/התראות, ב-6 שעות האחרונות) — אם הוא מתייחס ל"זה"/"הדוח"/"מה ששלחת", כנראה לאחת מאלה:]\n' + rec.map((x) => `- ${new Date(x.at).toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' })} (${x.where === 'coach' ? 'קבוצת מתאמנים' : x.where === 'biz' ? 'קבוצת עסק' : x.where === 'personal' ? 'קבוצה אישית' : x.where}): ${x.text.replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')
+  return out
+}
+
 async function handle(msg, text) {
   let typing = null
   let chat = null
@@ -2300,7 +2313,7 @@ async function handle(msg, text) {
     // "תחשבי לעומק" — מעבר חד-פעמי למודל החזק
     // 23.11.26 (אביאל: "שיהיה כמו הצ'אט פה איתך"): המוח המלא — המודל החזק, תיקיית הפרויקט, אותו זיכרון, עושה ולא רק עונה
     let slowT = setTimeout(() => { slowT = null; msg.reply(toWhatsApp('על זה. אעדכן כשמוכן.')).catch(() => {}) }, 75 * 1000)
-    let answer; try { answer = await askBrainFull(text + (await sendStateBlock())) } finally { if (slowT) clearTimeout(slowT) }
+    let answer; try { answer = await askBrainFull(text + (await replyContext(msg)) + (await sendStateBlock())) } finally { if (slowT) clearTimeout(slowT) }
     const { text: finalText0, notes, offered } = await runActions(answer)
     if (offered) offerDraft(offered); else { lastOfferedDraftId = null; prevOfferedDraftId = null } // תשובה רגילה בצ'אט מבטלת "כן" על התראה ישנה
     const { text: finalText, polls } = splitPolls(finalText0)
