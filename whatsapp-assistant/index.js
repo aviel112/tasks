@@ -684,10 +684,12 @@ async function promisesBlock() {
 
 // הטיוטה שהעוזרת הציעה אחרונה לאביאל — "כן"/"1"/"2" בלי שם חלים רק עליה
 let lastOfferedDraftId = null
+let AMBIG2 = null
 let prevOfferedDraftId = null, lastOfferedAt = 0 // ההצעה הקודמת ומתי הגיעה החדשה — "כן" שנכתב לפני שההתראה החדשה הגיעה שייך לקודמת
 let AMBIG = null // 22.11.26: "יש כמה" שמחכה למספר
 const EDIT_MSGS = new Set() // הודעות "ערוך": ציטוט עליהן = טקסט לשליחה, אף פעם לא הוראת תיקון
-function offerDraft(id) { if (id !== lastOfferedDraftId) prevOfferedDraftId = lastOfferedDraftId; lastOfferedDraftId = id; lastOfferedAt = Date.now() }
+let lastOfferedAsked = false // 23.11.26: ההצעה האחרונה הוצגה כי אביאל ביקש ("הבא", בחירה) — אז הוא מסתכל עליה, אין דו-משמעות
+function offerDraft(id) { if (id !== lastOfferedDraftId) prevOfferedDraftId = lastOfferedDraftId; lastOfferedDraftId = id; lastOfferedAt = Date.now(); try { lastOfferedAsked = !!(CHAT_ALS.getStore() || {}).chat } catch { lastOfferedAsked = false } }
 const PREFS_PATH = path.join(ROOT, 'brain', 'prefs.md')
 const prefsText = () => { try { return fs.readFileSync(PREFS_PATH, 'utf8').trim() } catch { return '' } }
 
@@ -1953,14 +1955,18 @@ function onIncoming0(msg) {
       draftCmd = null
     }
     // "כן"/"1"/"2" בלי שם ובלי ציטוט — רק אם הדבר האחרון שהעוזרת הציעה היא טיוטה שעדיין ממתינה; אחרת זו שיחה רגילה
+    // 23.11.26: תשובה 1/2 לשאלה "על מי?" (אחרי דו-משמעות) → הפקודה המקורית על הטיוטה שנבחרה
+    if (AMBIG2 && Date.now() - AMBIG2.at < 15 * 60e3 && /^[12]$/.test(String(text).trim())) { const pick = AMBIG2.ids[Number(String(text).trim()) - 1], cmd = { ...AMBIG2.cmd, ref: String(pick) }; AMBIG2 = null; if (drafts.get(pick)) { queue = queue.then(() => handleDraftCommand(msg, cmd)).catch((e) => console.error('[draft]', e)); return } }
     const bare = draftCmd && !draftCmd.ref && !msg.hasQuotedMsg
     const bareOk = bare && lastOfferedDraftId && drafts.get(lastOfferedDraftId)
     let bareId = lastOfferedDraftId
     if (bareOk && prevOfferedDraftId && prevOfferedDraftId !== bareId && drafts.get(prevOfferedDraftId)) {
       const wroteAt = (msg.timestamp || 0) * 1000
       if (wroteAt && wroteAt + 1000 <= lastOfferedAt) bareId = prevOfferedDraftId // נכתב לפני שההתראה החדשה הגיעה
-      else if (Date.now() - lastOfferedAt < 20000) { // התראה חדשה ממש עכשיו — לא לנחש למי
-        client.sendMessage(config.owner, toWhatsApp(`בדיוק נכנסה עוד הודעה, אז לא שלחתי כלום. לאיזה מהם? "כן ${prevOfferedDraftId}" או "כן ${lastOfferedDraftId}".`)).catch(console.error)
+      else if (!lastOfferedAsked && Date.now() - lastOfferedAt < 20000) { // התראה חדשה ממש עכשיו (לא כי ביקש) — לא לנחש למי
+        const a = drafts.get(prevOfferedDraftId), b = drafts.get(bareId)
+        AMBIG2 = { at: Date.now(), ids: [prevOfferedDraftId, bareId], cmd: { ...draftCmd } }
+        client.sendMessage(config.owner, toWhatsApp(`בדיוק הגיעה עוד טיוטה, אז עוד לא עשיתי כלום. על מי ענית?\n\n*1* · ${(a && a.name) || 'הקודמת'}\n*2* · ${(b && b.name) || 'החדשה'}`)).catch(console.error)
         return
       }
     }
@@ -2173,7 +2179,7 @@ async function handleMediaBatch(b) {
     const caps = files.map((f) => f.caption).filter(Boolean)
     const prompt = `אביאל שלח בצ'אט ${files.length > 1 ? files.length + ' קבצים' : 'קובץ'}:\n` + files.map((f, i) => `${i + 1}. ${f.fp}${f.name ? ' (' + f.name + ')' : ''}${f.caption ? ' — "' + f.caption + '"' : ''}`).join('\n') +
       '\nתסתכל עליהם (Read) ותבין מה הוא רוצה מהכיתוב. אם זו תוכנית אימון או תפריט של מתאמן — לבנות אותם באפליקציה של המתאמן לפי הסקיל new-trainee (סעיפים 2–3), לבדוק ב-plan ולדווח. אם זו תמונת התקדמות / משהו אחר — לפי "ניתוח תמונות" ב-whatsapp-assistant/brain/CLAUDE.md.' +
-      (caps.length ? '' : ' אין כיתוב — אם לא ברור מה לעשות, תשאל בסקר.') + ' הקבצים נמחקים אחרי התשובה.'
+      (caps.length ? '' : '') + ' הקבצים נמחקים אחרי התשובה.'
     let slowT = setTimeout(() => { slowT = null; b.first.reply(toWhatsApp('על זה. אעדכן כשמוכן.')).catch(() => {}) }, 75 * 1000)
     let answer; try { answer = await askBrainFull(prompt + (await sendStateBlock())) } finally { if (slowT) clearTimeout(slowT) }
     const { text: t0, notes } = await runActions(answer); const { text: t1, polls } = splitPolls(t0), { text: t, files } = splitFiles(t1)
