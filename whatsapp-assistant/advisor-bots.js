@@ -750,6 +750,7 @@ async function run(key) {
   const b = BOTS[key]; if (!b || RUNNING.has(key)) return // הריצה הקודמת עוד באמצע — לא במקביל (טיוטה כפולה לאותו ליד)
   const s0 = loadState(); const cfg = (s0.bots || {})[key] || {}
   if (cfg.enabled === false) return
+  if (cfg.pausedUntil && new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }) < cfg.pausedUntil) return // 23.11.26: השהיה זמנית (אביאל: לעצור סטוריז כמה ימים)
   RUNNING.add(key)
   try { await run0(key, b) } finally { RUNNING.delete(key) }
 }
