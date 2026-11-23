@@ -8,6 +8,8 @@ const os = require('os')
 const { execFile } = require('child_process')
 const { askBrain, askBrainOnce, askBrainFull, resetSession, resetFullSession, isLimitError } = require('./brain')
 const { AsyncLocalStorage } = require('async_hooks')
+let LAST_SAY = { dest: '', at: 0 } // הודעות מסשנים אחרים של קלוד (say-inbox): כל השיחה באותה קבוצה
+let LAST_AUTO_CAT = { cat: '', at: 0 } // 23.11.26 (אביאל: "שולח בכפילות"): המשך של אותה שיחה אוטומטית (10 דק') נשאר באותה קבוצה, לא קופץ לפי נושא
 const RECENT_AUTO = [] // 23.11.26: הודעות אוטומטיות אחרונות לאביאל (דוחות, טיוטות, התראות) — כדי שהמוח יבין על מה הוא עונה
 const CHAT_ALS = new AsyncLocalStorage() // 23.11.26: מה שנשלח בתוך טיפול בהודעה של אביאל בצ'אט הפרטי נשאר בפרטי; כל השאר (אוטומטי) הולך לקבוצה המתאימה
 const biz = require('./business-whatsapp')
@@ -91,7 +93,7 @@ function heOnly(t) { if (typeof t !== 'string' || !/[֐-׿]/.test(t)) return t; 
 { const _send = client.sendMessage.bind(client); client.sendMessage = (to, ...r) => { let dest = to
     try { if ((to === config.owner || routes.catOf(to)) && typeof r[0] === 'string') r[0] = heOnly(r[0]) } catch {}
     if (to === config.owner && typeof r[0] === 'string' && TECH_RE.test(r[0])) { try { fs.appendFileSync(path.join(ROOT, 'brain', 'tech-todo.md'), `\n## ${new Date().toISOString()}\n${r[0].slice(0, 3000)}\n`) } catch {} console.log('[tech-filter] held a technical message for Claude Code'); r[0] = toWhatsApp('משהו טכני לא הצליח אצלי. העברתי לתיקון, לא צריך לעשות כלום.') }
-    try { if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); let cat = routes.classify(txt); if ((!cat || cat === 'biz') && aboutTrainee(txt) && !/^\*?(ליד|5 לסגור)/.test(txt.replace(/^[\u200b\s]+/, ''))) cat = 'coach'; if (!cat && !(CHAT_ALS.getStore() || {}).chat) cat = routes.fallback(txt); dest = routes.gidFor(cat) || to } } } catch (e) { dest = to }
+    try { const st0 = CHAT_ALS.getStore() || {}; if (to === config.owner && st0.say && LAST_SAY.dest && Date.now() - LAST_SAY.at < 15 * 60000) dest = LAST_SAY.dest; else if (to === config.owner) { if (UPD_UNTIL > Date.now() && updGid()) dest = updGid(); else if (ROUTE_REPLY.until > Date.now() && ROUTE_REPLY.gid) dest = ROUTE_REPLY.gid; else { const txt = typeof r[0] === 'string' ? r[0] : ((r[1] && r[1].caption) || ''); let cat = routes.classify(txt); if ((!cat || cat === 'biz') && aboutTrainee(txt) && !/^\*?(ליד|5 לסגור)/.test(txt.replace(/^[\u200b\s]+/, ''))) cat = 'coach'; if (!cat && !(CHAT_ALS.getStore() || {}).chat) cat = (LAST_AUTO_CAT.cat && Date.now() - LAST_AUTO_CAT.at < 10 * 60000) ? LAST_AUTO_CAT.cat : routes.fallback(txt); if (cat && !(CHAT_ALS.getStore() || {}).chat) LAST_AUTO_CAT = { cat, at: Date.now() }; dest = routes.gidFor(cat) || to } } if (st0.say && to === config.owner) LAST_SAY = { dest, at: Date.now() } } catch (e) { dest = to }
     const body = typeof r[0] === 'string' ? r[0] : ''
     try { if ((to === config.owner || routes.catOf(to)) && !(CHAT_ALS.getStore() || {}).chat) { const tx = body || ((r[1] && r[1].caption) || '') || (r[0] && r[0].pollName ? 'סקר: ' + r[0].pollName : ''); if (tx) { RECENT_AUTO.push({ at: Date.now(), where: routes.catOf(dest) || 'פרטי', text: String(tx).slice(0, 600) }); while (RECENT_AUTO.length > 25) RECENT_AUTO.shift() } } } catch {}
     return _send(dest, ...r).catch(async (e) => { // 22.11.26: ווטסאפ לפעמים זורק שגיאה אחרי שההודעה כבר יצאה → בודקים לפני שמנסים שוב (אחרת כפילויות)
@@ -1103,7 +1105,7 @@ cron.schedule('20 9 * * 0-5', unansweredQuestions, { timezone: 'Asia/Jerusalem' 
 
 // 22.11.26: הודעות מקלוד קוד (הצעות לשיפור, דוח בנייה) — קובץ טקסט בתיקיית say-inbox נשלח לאביאל ונמחק
 setInterval(() => { if (!config.owner || !clientReady) return; try { const dir = path.join(ROOT, 'say-inbox'); if (!fs.existsSync(dir)) return
-  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.txt')).sort()) { const fp = path.join(dir, f), t = fs.readFileSync(fp, 'utf8').trim(); fs.rmSync(fp); if (t) client.sendMessage(config.owner, toWhatsApp(t)).catch(() => {}) } } catch (e) { console.error('[say-inbox]', e.message) } }, 60 * 1000)
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.txt')).sort()) { const fp = path.join(dir, f), t = fs.readFileSync(fp, 'utf8').trim(); fs.rmSync(fp); if (t) CHAT_ALS.run({ say: true }, () => client.sendMessage(config.owner, toWhatsApp(t))).catch(() => {}) } } catch (e) { console.error('[say-inbox]', e.message) } }, 60 * 1000)
 
 // ── מעקב שלישי 11:00 (22.11.26, אביאל): מי שקיבל סיכום שבוע ולא ענה → הודעת המשך קצרה, כולם בהודעה אחת עם "כן לכולם" ──
 const WKSUM_PATH = path.join(ROOT, 'weekly-sum.json')

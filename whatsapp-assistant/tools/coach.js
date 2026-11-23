@@ -4,6 +4,7 @@
 //   node whatsapp-assistant/tools/coach.js dashboardClientCard '["תמיר קורציאה"]'
 //   node whatsapp-assistant/tools/coach.js plan <token>      ← מה האפליקציה רואה (תפריט/תוכנית)
 //   node whatsapp-assistant/tools/coach.js data <token>      ← נתוני הבית (צעדים, שקילות, photoDue) — לא מסמן כניסה
+// ⚠️ dashboardNote = הודעה למתאמן באפליקציה ("הודעה מאביאל" + התראה לטלפון)! לא להערות פנימיות. הערות פנימיות → whatsapp-assistant/brain/clients/<שם>.md
 const U = 'https://script.google.com/macros/s/AKfycbxSkxJJ1ODs067IOfDkuosXzKX-pVi2W7uTcWKAS-7YFuh8PW9mrjSS8bNC4SaiRTkP/exec'
 const [fn, raw] = process.argv.slice(2)
 if (!fn) { console.error('חסר שם פונקציה'); process.exit(2) }
