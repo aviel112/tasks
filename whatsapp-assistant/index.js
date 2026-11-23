@@ -488,11 +488,14 @@ async function alertWithDraft({ title, who, situation, extraRules = '', headline
   const tms = parsed ? [parsed.draft, parsed.alt, parsed.alt2].map((t, i) => ({ i: i + 1, n: t ? drafts.unverifiedTimes(t, [saidFull, who.content, situation].join(' ')) : [] })).filter((x) => x.n.length) : []
   for (const x of tms) { const u = unv.find((y) => y.i === x.i); if (u) u.n = [...new Set(u.n.concat(x.n))]; else unv.push(x) }
   const unvLine = unv.length ? '*לבדוק לפני ששולחים — מספר שלא מצאתי בנתונים:* ' + unv.map((x) => x.n.join(', ') + ` (נוסח ${x.i})`).join(' · ') : ''
+  const clm = parsed ? [parsed.draft, parsed.alt, parsed.alt2].map((t, i) => ({ i: i + 1, w: t ? drafts.unverifiedClaims(t, srcAll) : [] })).filter((x) => x.w.length) : []
+  const clmLine = clm.length ? '*לבדוק — טענה שלא מצאתי בנתונים:* ' + clm.map((x) => '"' + x.w.join('", "') + `" (נוסח ${x.i})`).join(' · ') : ''
+  if (clm.length) console.log('[guard] claims', name, JSON.stringify(clm))
   if (unv.length) console.log('[guard] unverified', name, JSON.stringify(unv))
   const quoteBlock = saidFull ? saidFull.split('\n').map((l) => '> ' + l).join('\n') : ''
   const head = headline ? `*${shown}* ${headline}` : `*${shown}* כתב${parsed && parsed.risk === 'low' ? ' (שגרתי)' : parsed ? ' (לבדוק)' : ''}:`
   const lines = parsed
-    ? [head, quoteBlock, '', parsed.alt ? '*1.*' : '*התשובה שאשלח:*', parsed.draft, ...(parsed.alt ? ['', '*2.*', parsed.alt] : []), ...(parsed.alt2 ? ['', '*3.*', parsed.alt2] : []), ...(unvLine ? ['', unvLine] : []), '', drafts.approvalHint(id, heb || name, !!parsed.alt, !!parsed.alt2)]
+    ? [head, quoteBlock, '', parsed.alt ? '*1.*' : '*התשובה שאשלח:*', parsed.draft, ...(parsed.alt ? ['', '*2.*', parsed.alt] : []), ...(parsed.alt2 ? ['', '*3.*', parsed.alt2] : []), ...(unvLine ? ['', unvLine] : []), ...(clmLine ? [clmLine] : []), '', drafts.approvalHint(id, heb || name, !!parsed.alt, !!parsed.alt2)]
     : [head, quoteBlock, '', drafts.stripEmoji(answer)]
   if (id) { draftQueuePush(id, lines.join('\n'), config.owner, !hold && !!String(who.content || '').trim()); return id } // 22.11.26: מחזיר את מספר הטיוטה (הסבב השבועי מקפל לתוכה רק אם נוצרה) // 22.11.26: הכל בתור, אחת בכל פעם; לקוח שכתב — לפני טיוטות יזומות
   let sent; try { sent = await client.sendMessage(config.owner, toWhatsApp(lines.join('\n'))) } catch (e) { if (id) drafts.remove(id); throw e } // בלי התראה אין טיוטה (אחרת היא חוסמת את הלקוח 36 שעות)
@@ -1240,14 +1243,21 @@ async function sendPhotoRecs(name) {
     short = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)) } catch (e) { console.error('[photo-recs]', e.message) }
   const recs = (short && Array.isArray(short.recs) && short.recs.length === w.recs.length) ? short.recs : w.recs.map((r) => r.split(/[,.]/)[0])
   const weak = (w.weak || []).map((x) => x.mu).filter(Boolean).join(', ')
+  // 23.11.26 (אביאל: "לפני/אחרי חודשית"): אם יש 14+ ימים בין התמונה הראשונה לאחרונה — קולאז׳ לאביאל + אופציה לשלוח למתאמן
+  let ba = null; try { ba = await require('./tools/ba-card').baCard(name) } catch (e) { console.error('[ba-card]', e.message) }
+  if (ba) await client.sendMessage(config.owner, MessageMedia.fromFilePath(ba.path), { caption: `לפני / אחרי · ${first} · ${ba.gap} ימים` }).catch(() => { ba = null })
   const text = `*תמונות חדשות · ${name}*\n${(short && short.sum) || String(w.summary || '').split('.')[0]}` + (weak ? `\nחולשות: ${weak}` : '') +
-    `\n\n*מה לשנות בתוכנית:*\n` + recs.map((r, i) => `*${i + 1}* · ${r}`).join('\n') + `\n\nתענה במספרים שאתה רוצה (למשל 1 3) ואני מעדכן ל${first} את התוכנית. אפשר גם לכתוב לי מה לשנות.`
+    `\n\n*מה לשנות בתוכנית:*\n` + recs.map((r, i) => `*${i + 1}* · ${r}`).join('\n') + (ba ? `\n*${recs.length + 1}* · לשלוח ל${first} את הלפני/אחרי לאפליקציה` : '') + `\n\nתענה במספרים שאתה רוצה (למשל 1 3) ואני מעדכן ל${first} את התוכנית. אפשר גם לכתוב לי מה לשנות.`
   const m = await client.sendMessage(config.owner, toWhatsApp(text)).catch(() => null)
-  PHOTO_REC = { name, recs: w.recs, short: recs, at: Date.now(), msgId: m && m.id && m.id._serialized }
+  PHOTO_REC = { name, recs: w.recs, short: recs, at: Date.now(), msgId: m && m.id && m.id._serialized, ba: ba && ba.path, baOpt: ba ? recs.length + 1 : 0 }
   return true
 }
 async function applyPhotoRecs(msg, picks) {
   const p = PHOTO_REC; PHOTO_REC = null
+  if (p.baOpt && picks.includes(p.baOpt)) { picks = picks.filter((x) => x !== p.baOpt)
+    try { const url = 'data:image/jpeg;base64,' + fs.readFileSync(p.ba).toString('base64'); const r = await coachApi('dashboardBaSend', [p.name, url, '']); await msg.reply(toWhatsApp(`הלפני/אחרי נשלח ל${p.name.split(' ')[0]} לאפליקציה${r && r.devices ? ', עם התראה' : ''}.`)).catch(() => {}) } catch (e) { await msg.reply(toWhatsApp('הלפני/אחרי לא נשלח: ' + e.message)).catch(() => {}) }
+    try { fs.rmSync(p.ba, { force: true }) } catch {}
+    if (!picks.length) return }
   const chosen = picks.map((i) => p.recs[i - 1]).filter(Boolean)
   await msg.reply(toWhatsApp(`על זה. מעדכן ל${p.name.split(' ')[0]} את התוכנית לפי ${picks.join(', ')}.`)).catch(() => {})
   try {
@@ -1584,6 +1594,7 @@ async function eveningSummary() {
 cron.schedule('30 21 * * 0-4', eveningSummary, { timezone: 'Asia/Jerusalem' })
 // 22.11.26 (אביאל בחר בסקר): צעדים בערב, מתאמן חדש שלא נכנס, בדיקות דם (כל 4 ימים), תמונות שלא הועלו — טיוטות בתור הרגיל
 cron.schedule('0 20 * * 0-4', careRun('stepsPush', 'steps'), { timezone: 'Asia/Jerusalem' })
+cron.schedule('45 9 * * 0-5', careRun('lifeEvents', 'ev'), { timezone: 'Asia/Jerusalem' }) // 23.11.26: אירועים בחיים של מתאמנים (brain/events.json)
 cron.schedule('0 11 * * 0-5', careRun('notOpened', 'open'), { timezone: 'Asia/Jerusalem' })
 cron.schedule('15 11 * * 0-5', careRun('bloodNag', 'blood'), { timezone: 'Asia/Jerusalem' })
 cron.schedule('30 11 * * 0-5', careRun('photosNag', 'ph'), { timezone: 'Asia/Jerusalem' })
@@ -1981,9 +1992,9 @@ function onIncoming0(msg) {
     { const mq0 = msg.hasQuotedMsg && config.owner && cid === config.owner && mealRelay.qidByStanza(msg._data && msg._data.quotedStanzaID) // 18.11.26: "כן"/תיקון על הודעת ארוחה — לפני הטיוטות
       if (mq0) { queue = queue.then(() => mealRelay.fix(mq0, text)).catch((e) => { console.error('[meal-fix]', e); client.sendMessage(config.owner, toWhatsApp('התיקון לארוחה לא עבר: ' + String(e.message || e).slice(0, 120))).catch(() => {}) }); return } }
     // 23.11.26: תשובה במספרים להמלצות מניתוח תמונות (בציטוט, או כשזו ההודעה האחרונה שהוצגה)
-    if (PHOTO_REC && Date.now() - PHOTO_REC.at < 12 * 3600e3 && /^\s*\d(?:[\s,ו]+\d)*\s*$/.test(text)) {
+    if (PHOTO_REC && Date.now() - PHOTO_REC.at < 12 * 3600e3 && /^\s*\d(?:[\s,ו]+\d)*\s*$/.test(text)) { const maxN = PHOTO_REC.recs.length + (PHOTO_REC.baOpt ? 1 : 0)
       const qid = msg.hasQuotedMsg && msg._data && msg._data.quotedStanzaID, quotedMine = qid && PHOTO_REC.msgId && PHOTO_REC.msgId.endsWith('_' + qid)
-      if (quotedMine || PHOTO_REC.at > lastOfferedAt) { const picks = [...new Set((text.match(/\d/g) || []).map(Number))].filter((n) => n >= 1 && n <= PHOTO_REC.recs.length)
+      if (quotedMine || PHOTO_REC.at > lastOfferedAt) { const picks = [...new Set((text.match(/\d/g) || []).map(Number))].filter((n) => n >= 1 && n <= maxN)
         if (picks.length) { queue = queue.then(() => applyPhotoRecs(msg, picks)).catch((e) => console.error('[photo-recs]', e)); return } } }
     let draftCmd = drafts.parseCommand(text)
     // 22.11.26: תשובה למספר אחרי "יש כמה" → מבצעים את הפקודה המקורית על הטיוטה שנבחרה

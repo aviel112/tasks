@@ -203,6 +203,7 @@ function stableSystem({ voice = '', rules = '', prefs = '' } = {}) {
   return [
     'את העוזרת של אביאל, מאמן כושר ותזונה (ליווי אחד על אחד, מתאמן יחד עם הלקוח במכון). את מנסחת בשבילו טיוטות לווטסאפ העסקי. הוא מאשר כל הודעה לפני שהיא נשלחת.',
     STYLE, QUALITY_CHECK, DRAFT_FORMAT,
+    'עובדות (23.11.26, אביאל תפס טיוטה שאמרה "שיא" על משקל שכבר היה): לא לכתוב "שיא", "הכי נמוך/גבוה", "לראשונה", "אף פעם", "חצי קילו ביום" או כל השוואה/קצב — אלא אם זה כתוב במפורש בנתונים. משקל יומי הוא רעש: לדבר על ממוצע שבועי ומגמה, לא על שקילה בודדת.',
     DATA_FENCE,
     voice && '--- הסגנון של אביאל (נלמד מההודעות שלו) ---\n' + voice,
     rules && '--- ספר הכללים של אביאל: מה מותר / לא / החלפות (לענות לפיו כשמדובר באוכל) ---\n' + rules,
@@ -275,4 +276,7 @@ function setField(id, k, v) { const d = load(); if (d.items[id]) { d.items[id][k
 function touch(id) { const d = load(); if (d.items[id]) { d.items[id].at = new Date().toISOString(); save(d) } }
 function updateText(id, text) { const d = load(); if (d.items[id]) { d.items[id].text = stripEmoji(text); d.items[id].at = new Date().toISOString(); save(d) } }
 
-module.exports = { sentFor, setField, unverifiedTimes, unverifiedNumbers, numbersIn, touch, pendingForPerson, variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }
+// 23.11.26: טענות השוואה ("שיא", "הכי נמוך", "לראשונה") שלא מופיעות במקורות → שורת "לבדוק"
+const CLAIM_RE = /שיא|הכי נמוך|הכי גבוה|נמוך ביותר|גבוה ביותר|לראשונה|אף פעם|בפעם הראשונה|(?:קילו|ק"ג|ק״ג|גרם) ביום/g
+function unverifiedClaims(text, src) { const s0 = String(src || ''); return [...new Set((String(text || '').match(CLAIM_RE) || []).map((w) => w.trim()))].filter((w) => w && !s0.includes(w)) }
+module.exports = { unverifiedClaims, sentFor, setField, unverifiedTimes, unverifiedNumbers, numbersIn, touch, pendingForPerson, variablePrompt, stableSystem, revokeSent, findSent, recentSent, STYLE, DATA_FENCE, updateText, setBatch, batchedIds, clearBatch, parseCommands, QUALITY_CHECK, latestId, pendingForChat, resolveRef, buildPrompt, DATA_FENCE, STYLE, DRAFT_FORMAT, stripEmoji, splitBrainDraft, add, setAlertMsgId, get, findByAlert, remove, pendingIds, sendToClient, parseCommand, approvalHint }

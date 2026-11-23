@@ -72,7 +72,8 @@ async function milestones() {
     const g = liftGains(pl), f = await D.coachApi('dashboardWeekFacts', [c.name]).catch(() => null)
     const label = m === 30 ? 'חודש' : m === 60 ? 'חודשיים' : m === 90 ? '3 חודשים' : 'חצי שנה'
     const facts = [g.length ? 'התקדמות בכוח מאז שהתחיל/ה (מהאפליקציה): ' + g.map((x) => `${x.ex} ${x.from}→${x.to} ק"ג`).join(', ') : '',
-      f && f.weighs && f.avg ? `שקילות השבוע: ${f.weighs}, ממוצע ${f.avg} ק"ג` : ''].filter(Boolean)
+      f && f.weighs && f.avg ? `שקילות השבוע: ${f.weighs}, ממוצע ${f.avg} ק"ג` : '',
+      card && (card.weekly || []).length >= 2 ? `ממוצעים שבועיים מההתחלה: ${card.weekly.join(' → ')}${card.first ? ` (שקילה ראשונה ${card.first})` : ''}. לדבר על המגמה, לא על שקילה בודדת` : ''].filter(Boolean)
     st.mile[k] = new Date().toISOString(); save(st) // גם בלי נתונים — לא לחזור על אותו ציון דרך
     if (!facts.length) continue // בלי מספר אמיתי אין חגיגה — לא ממציאים
     const strong = g.some((x) => x.pct >= 0.15)
@@ -183,4 +184,30 @@ async function photosNag() {
   return made
 }
 
-module.exports = { init, suppRefill, milestones, afterWorkout, stepsPush, notOpened, bloodNag, photosNag, liftGains, todayWorkout, _days: days }
+// ===== 23.11.26 (אביאל בחר: "אירועים בחיים של מתאמנים"): brain/events.json — חתונה, טיסה, חג, אירוע.
+// 7 ימים לפני (חלון 6–9 ימים): טיוטה עם תוכנית קצרה לאירוע; ביום עצמו: ברכה/דחיפה. כל אחת פעם אחת. תאריך "בערך" → רק הטיוטה של לפני.
+const EVENTS = path.join(__dirname, 'brain', 'events.json')
+async function lifeEvents() {
+  let ev = []; try { ev = JSON.parse(fs.readFileSync(EVENTS, 'utf8')) } catch { return 0 }
+  const today = D.today(); let made = 0, changed = false
+  const list = (await D.coachApi('dashboardList')) || {}, byName = {}; ((list && list.clients) || []).forEach((c) => { byName[c.name] = c })
+  for (const e of ev) {
+    if (!e.date || !e.name) continue; e.sent = e.sent || {}
+    const left = days(today, e.date), c = byName[e.name]; if (!c || !pn(c.phone)) continue
+    const kind = left >= 6 && left <= 9 && !e.sent.pre ? 'pre' : left === 0 && !e.approx && !e.sent.day ? 'day' : ''
+    if (!kind) continue
+    const who = await whoOf(c); if (busyWith(who)) continue
+    const situation = kind === 'pre'
+      ? `בעוד ${left} ימים${e.approx ? ' (בערך)' : ''}: ${e.what} של ${first(e.name)}. ${e.note || ''}`
+      : `היום: ${e.what} של ${first(e.name)}. ${e.note || ''}`
+    const rules = kind === 'pre'
+      ? 'הודעה קצרה (3–4 שורות) בקול של אביאל: להזכיר שזה מתקרב ולתת תוכנית פשוטה של 2–3 דברים לשבוע הזה ולזמן האירוע (למשל: באירוע/חופשה — אימון קצר בחדר או הליכה, חלבון בכל ארוחה, לא לרדוף אחרי המשקל). לסיים בשאלה מה התאריך המדויק / מה התוכניות. בלי הטפה.'
+      : 'הודעה קצרה מאוד (1–2 שורות) בקול של אביאל: ברכה חמה לאירוע. בלי שום דבר על אוכל/משקל/אימונים.'
+    const id = await D.alertWithDraft({ title: 'אירוע', who, headline: `${e.what} · ${kind === 'pre' ? 'בעוד ' + left + ' ימים' : 'היום'}`, situation, extraRules: rules, hold: true, noQuote: true }).catch((er) => { D.log('[care-ev]', e.name, er.message); return false })
+    if (id) { e.sent[kind] = today; made++; changed = true }
+  }
+  if (changed) { fs.writeFileSync(EVENTS + '.tmp', JSON.stringify(ev, null, 1)); fs.renameSync(EVENTS + '.tmp', EVENTS) }
+  return made
+}
+
+module.exports = { lifeEvents, init, suppRefill, milestones, afterWorkout, stepsPush, notOpened, bloodNag, photosNag, liftGains, todayWorkout, _days: days }
